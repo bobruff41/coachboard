@@ -1,4 +1,4 @@
-const VERSION = "coachboard-pro-v4"; // bump this anytime you want to force updates
+const VERSION = "coachboard-pro-v6";
 const CACHE_STATIC = `${VERSION}-static`;
 
 const STATIC_ASSETS = [
@@ -19,19 +19,17 @@ self.addEventListener("install", (event) => {
 
 self.addEventListener("activate", (event) => {
   event.waitUntil((async () => {
-    // delete old caches
     const keys = await caches.keys();
-    await Promise.all(keys.map((k) => (k.startsWith("coachboard-pro-") && k !== CACHE_STATIC) ? caches.delete(k) : null));
+    await Promise.all(keys.map((k) =>
+      (k.endsWith("-static") && k !== CACHE_STATIC) ? caches.delete(k) : null
+    ));
     await self.clients.claim();
   })());
 });
 
-// Network-first for HTML so the app updates; cache-first for everything else.
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   const url = new URL(req.url);
-
-  // only handle same-origin
   if (url.origin !== self.location.origin) return;
 
   const isHTML =
@@ -53,7 +51,6 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // cache-first for css/js/etc
   event.respondWith((async () => {
     const cached = await caches.match(req);
     if (cached) return cached;
