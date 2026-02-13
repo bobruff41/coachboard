@@ -804,15 +804,30 @@ dropModeBtn.onclick = ()=>{
   dropModeBtn.textContent = dropMode ? "Drop on Tap" : "Drop Off";
 };
 
-// Sidebar toggle
-toggleSidebarBtn.onclick = ()=>{
+// Sidebar toggle (iPad-friendly)
+function applySidebarHidden(hidden){
+  appMain.classList.toggle("sidebarHidden", hidden);
+  toggleSidebarBtn.textContent = hidden ? "Show Panel" : "Hide Panel";
+}
+
+function toggleSidebar(){
   const ui = loadUI();
   ui.sidebarHidden = !ui.sidebarHidden;
   saveUI(ui);
+  applySidebarHidden(ui.sidebarHidden);
+}
 
-  appMain.classList.toggle("sidebarHidden", ui.sidebarHidden);
-  toggleSidebarBtn.textContent = ui.sidebarHidden ? "Show Panel" : "Hide Panel";
-};
+// Bind BOTH click + touch (iPad/PWA sometimes fails click)
+toggleSidebarBtn.addEventListener("click", (e) => {
+  e.preventDefault();
+  toggleSidebar();
+});
+
+toggleSidebarBtn.addEventListener("touchend", (e) => {
+  e.preventDefault();     // prevents “ghost click”
+  toggleSidebar();
+}, { passive: false });
+
 
 // Film toggle
 toggleFilmViewBtn.onclick = ()=>{
@@ -1350,8 +1365,9 @@ function init(){
   initTemplateList();
 
   // Apply saved UI state (sidebar)
-  const ui = loadUI();
-  appMain.classList.toggle("sidebarHidden", !!ui.sidebarHidden);
+const ui = loadUI();
+applySidebarHidden(!!ui.sidebarHidden);
+
   toggleSidebarBtn.textContent = ui.sidebarHidden ? "Show Panel" : "Hide Panel";
 
   // layers init
@@ -1410,3 +1426,4 @@ function snapshotBoardSeed(){
 snapshotBoardSeed();
 
 init();
+
