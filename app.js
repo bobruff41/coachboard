@@ -1,13 +1,11 @@
-// CoachBoard Pro (Offline-first PWA)
-// Features: Library boards, Undo/Redo, Zoom/Pan, Layers, Templates, Stencils, Practice plan, PNG + PDF export.
-// Plus: service-worker update handling for iPad (auto-reload on new version).
+// CoachBoard Pro + Film Clips (Offline-first)
+// Film: import video clips -> store offline (IndexedDB) -> side-by-side field + player.
 
 const canvas = document.getElementById("board");
 const ctx = canvas.getContext("2d");
-
 const statusEl = document.getElementById("status");
 
-// Top toolbar
+// Toolbar
 const undoBtn = document.getElementById("undo");
 const redoBtn = document.getElementById("redo");
 const toolSelectBtn = document.getElementById("toolSelect");
@@ -16,12 +14,13 @@ const toolBlockBtn  = document.getElementById("toolBlock");
 const toolTextBtn   = document.getElementById("toolText");
 const exportPngBtn  = document.getElementById("exportPng");
 const exportPdfBtn  = document.getElementById("exportPdf");
+const toggleFilmViewBtn = document.getElementById("toggleFilmView");
 
-// Tabs
+// Tabs/panels
 const tabBtns = Array.from(document.querySelectorAll(".tab"));
 const panels  = Array.from(document.querySelectorAll(".tabPanel"));
 
-// Library
+// Library UI
 const newBoardBtn = document.getElementById("newBoard");
 const boardPicker = document.getElementById("boardPicker");
 const boardNameEl = document.getElementById("boardName");
@@ -29,49 +28,53 @@ const saveBoardNameBtn = document.getElementById("saveBoardName");
 const duplicateBoardBtn = document.getElementById("duplicateBoard");
 const deleteBoardBtn = document.getElementById("deleteBoard");
 
-// Templates
+// Templates UI
 const templateModeEl = document.getElementById("templateMode");
 const templateListEl = document.getElementById("templateList");
 
-// Stencils & layers
+// Layers/stencils UI
 const activeLayerEl = document.getElementById("activeLayer");
 const showBaseEl = document.getElementById("showBase");
 const showTagsEl = document.getElementById("showTags");
 const showAdjEl  = document.getElementById("showAdj");
 const dropModeBtn = document.getElementById("dropMode");
-
 const stencilTabBtns = Array.from(document.querySelectorAll(".tabBtn"));
 const stencilGrid = document.getElementById("stencilGrid");
 
-// Practice
+// Practice UI
 const practiceDateEl = document.getElementById("practiceDate");
 const addPeriodBtn = document.getElementById("addPeriod");
 const periodListEl = document.getElementById("periodList");
 const clearPracticeBtn = document.getElementById("clearPractice");
 const savePracticeBtn = document.getElementById("savePractice");
 
+// Film UI
+const addClipsBtn = document.getElementById("addClips");
+const clearClipsBtn = document.getElementById("clearClips");
+const clipListEl = document.getElementById("clipList");
+const clipPicker = document.getElementById("clipPicker");
+const filmPane = document.getElementById("filmPane");
+const filmPlayer = document.getElementById("filmPlayer");
+const filmMiniList = document.getElementById("filmMiniList");
+const workspaceEl = document.querySelector(".workspace");
+
 // Storage keys
-const STORAGE = {
-  app: "coachboard_pro_v1",
-};
+const STORAGE = { app: "coachboard_pro_v2" };
 
 // --------- App State ----------
 let tool = "select"; // select | route | block | text
-
-// View transform (zoom/pan)
 let view = { scale: 1.0, tx: 0, ty: 0 };
-
-// Keyboard pan mode
 let isPanningMode = false;
 let isPanning = false;
 let panStart = { x:0, y:0, tx:0, ty:0 };
-
-// Drawing and selection
 let dragging = false;
 let dragOffset = {x:0,y:0};
 let drawingStroke = null;
 
-// Stencil state
+let dropMode = true;
+let activeLayer = "base";
+let showLayer = { base:true, tags:true, adj:true };
+
 const STENCILS = {
   O: ["QB","RB","FB","X","Z","Y","H","LT","LG","C","RG","RT"],
   D: ["E","T","N","S","W","M","R","CB","FS","SS","NB"],
@@ -79,17 +82,17 @@ const STENCILS = {
 };
 let activeStencilTab = "O";
 let activeStencilLabel = "QB";
-let dropMode = true;
 
-// Layer state
-let activeLayer = "base";
-let showLayer = { base:true, tags:true, adj:true };
+// Film state
+let filmOn = false;
+let currentClipUrl = null;
+let currentClipId = null;
 
-// App data: multiple boards + practice plan
+// App data: boards + practice
 let appData = {
   currentBoardId: null,
   boards: [],
-  practice: { date:"", periods:[] } // {time,title,note}
+  practice: { date:"", periods:[] }
 };
 
 function newEmptyBoard(name="New Board"){
@@ -98,16 +101,75 @@ function newEmptyBoard(name="New Board"){
     name,
     createdAt: Date.now(),
     updatedAt: Date.now(),
-    players: [], // {id,x,y,r,label,side,layer}
-    strokes: [], // {id,kind,layer,points:[{x,y}], text?:string}
+    players: [],
+    strokes: [],
     selectedId: null,
     undo: [],
-    redo: []
+    redo: [],
+    clipIds: [] // <-- per-board clips
   };
 }
-
 function currentBoard(){
   return appData.boards.find(b => b.id === appData.currentBoardId) || null;
+}
+
+// --------- IndexedDB (film clips) ----------
+const CLIP_DB = {
+  name: "coachboard_clips_v1",
+  store: "clips"
+};
+
+function openClipDB(){
+  return new Promise((resolve, reject)=>{
+    const req = indexedDB.open(CLIP_DB.name, 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(CLIP_DB.store)){
+        db.createObjectStore(CLIP_DB.store, { keyPath: "id" });
+      }
+    };
+    req.onsuccess = ()=> resolve(req.result);
+    req.onerror = ()=> reject(req.error);
+  });
+}
+
+async function idbPutClip(clip){
+  const db = await openClipDB();
+  return new Promise((resolve, reject)=>{
+    const tx = db.transaction(CLIP_DB.store, "readwrite");
+    tx.objectStore(CLIP_DB.store).put(clip);
+    tx.oncomplete = ()=> resolve(true);
+    tx.onerror = ()=> reject(tx.error);
+  });
+}
+
+async function idbGetClip(id){
+  const db = await openClipDB();
+  return new Promise((resolve, reject)=>{
+    const tx = db.transaction(CLIP_DB.store, "readonly");
+    const req = tx.objectStore(CLIP_DB.store).get(id);
+    req.onsuccess = ()=> resolve(req.result || null);
+    req.onerror = ()=> reject(req.error);
+  });
+}
+
+async function idbDeleteClip(id){
+  const db = await openClipDB();
+  return new Promise((resolve, reject)=>{
+    const tx = db.transaction(CLIP_DB.store, "readwrite");
+    tx.objectStore(CLIP_DB.store).delete(id);
+    tx.oncomplete = ()=> resolve(true);
+    tx.onerror = ()=> reject(tx.error);
+  });
+}
+
+async function idbListClipsByIds(ids){
+  const out = [];
+  for (const id of ids){
+    const clip = await idbGetClip(id);
+    if (clip) out.push(clip);
+  }
+  return out;
 }
 
 // --------- Persistence ----------
@@ -133,6 +195,7 @@ function loadApp(){
       b.players ||= [];
       b.strokes ||= [];
       b.selectedId ||= null;
+      b.clipIds ||= [];
     }
     appData.practice ||= { date:"", periods:[] };
   } catch {
@@ -140,11 +203,9 @@ function loadApp(){
     appData.currentBoardId = appData.boards[0].id;
   }
 }
-
 function saveApp(){
   localStorage.setItem(STORAGE.app, JSON.stringify(appData));
 }
-
 function markBoardUpdated(){
   const b = currentBoard();
   if (!b) return;
@@ -161,7 +222,6 @@ function snapshotBoard(){
   if (b.undo.length > 60) b.undo.shift();
   b.redo = [];
 }
-
 function undo(){
   const b = currentBoard();
   if (!b || b.undo.length === 0) return;
@@ -176,7 +236,6 @@ function undo(){
   markBoardUpdated();
   render();
 }
-
 function redo(){
   const b = currentBoard();
   if (!b || b.redo.length === 0) return;
@@ -194,12 +253,8 @@ function redo(){
 
 // --------- Coordinate transforms ----------
 function toWorld(pt){
-  return {
-    x: (pt.x - view.tx) / view.scale,
-    y: (pt.y - view.ty) / view.scale
-  };
+  return { x: (pt.x - view.tx) / view.scale, y: (pt.y - view.ty) / view.scale };
 }
-
 function canvasPointFromEvent(e){
   const rect = canvas.getBoundingClientRect();
   const scaleX = canvas.width  / rect.width;
@@ -207,7 +262,7 @@ function canvasPointFromEvent(e){
   return { x:(e.clientX - rect.left)*scaleX, y:(e.clientY - rect.top)*scaleY };
 }
 
-// --------- Drawing: Field ----------
+// --------- Field drawing (vertical + subtle watermark) ----------
 function drawField(){
   ctx.save();
   ctx.setTransform(view.scale, 0, 0, view.scale, view.tx, view.ty);
@@ -217,38 +272,60 @@ function drawField(){
 
   const margin = 90;
   const top = margin, left = margin, right = canvas.width - margin, bottom = canvas.height - margin;
+  const midX = (left + right) / 2;
+  const midY = (top + bottom) / 2;
 
+  // Watermark
+  ctx.save();
+  ctx.translate(midX, midY);
+  ctx.rotate(-Math.PI/12);
+  ctx.globalAlpha = 0.08;
+  ctx.fillStyle = "#ffffff";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = '900 130px "Champion Serif","Champion-Serif", Georgia, "Times New Roman", serif';
+  ctx.fillText("CoachBoard", 0, 0);
+  ctx.restore();
+
+  // Outer
   ctx.strokeStyle = "rgba(255,255,255,0.65)";
   ctx.lineWidth = 4;
   ctx.strokeRect(left, top, right-left, bottom-top);
 
+  // Midfield line (horizontal)
   ctx.lineWidth = 3;
   ctx.beginPath();
-  ctx.moveTo((left+right)/2, top);
-  ctx.lineTo((left+right)/2, bottom);
+  ctx.moveTo(left, midY);
+  ctx.lineTo(right, midY);
   ctx.stroke();
 
+  // Hash columns (vertical orientation)
   const hashInset = 210;
-  const hashY1 = top + hashInset;
-  const hashY2 = bottom - hashInset;
+  const hashX1 = left + hashInset;
+  const hashX2 = right - hashInset;
 
   ctx.lineWidth = 2;
-  for (let x = left; x <= right; x += 60){
-    ctx.beginPath(); ctx.moveTo(x, hashY1); ctx.lineTo(x, hashY1 + 14); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(x, hashY2); ctx.lineTo(x, hashY2 - 14); ctx.stroke();
+  for (let y = top; y <= bottom; y += 60) {
+    ctx.beginPath(); ctx.moveTo(hashX1, y); ctx.lineTo(hashX1 + 14, y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(hashX2, y); ctx.lineTo(hashX2 - 14, y); ctx.stroke();
   }
 
+  // Yard lines (horizontal across)
   ctx.strokeStyle = "rgba(255,255,255,0.35)";
   ctx.lineWidth = 2;
-  for (let x = left; x <= right; x += 120){
-    ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.stroke();
+  for (let y = top; y <= bottom; y += 120) {
+    ctx.beginPath();
+    ctx.moveTo(left, y);
+    ctx.lineTo(right, y);
+    ctx.stroke();
   }
 
+  // LOS guide dotted
   ctx.setLineDash([10,10]);
   ctx.strokeStyle = "rgba(255,255,255,0.55)";
   ctx.beginPath();
-  ctx.moveTo((left+right)/2 - 260, (top+bottom)/2);
-  ctx.lineTo((left+right)/2 + 260, (top+bottom)/2);
+  ctx.moveTo(midX - 320, midY);
+  ctx.lineTo(midX + 320, midY);
   ctx.stroke();
   ctx.setLineDash([]);
 
@@ -262,7 +339,7 @@ function isLayerVisible(layer){
          (layer === "adj"  && showLayer.adj);
 }
 
-// --------- Drawing: Players/Strokes ----------
+// --------- Draw players/strokes ----------
 function drawPlayers(){
   const b = currentBoard();
   if (!b) return;
@@ -276,6 +353,7 @@ function drawPlayers(){
     const fill = p.side === "O" ? "rgba(255,255,255,0.92)" :
                  p.side === "D" ? "rgba(230,230,230,0.86)" :
                                   "rgba(210,210,210,0.80)";
+
     ctx.beginPath();
     ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
     ctx.fillStyle = fill;
@@ -380,7 +458,6 @@ function addPlayerAt(x,y,label,side){
   });
   markBoardUpdated();
 }
-
 function addTextAt(x,y,text){
   const b = currentBoard();
   if (!b) return;
@@ -487,7 +564,7 @@ canvas.addEventListener("pointerup", ()=>{
   isPanning = false;
 });
 
-// Zoom (wheel)
+// Zoom
 canvas.addEventListener("wheel", (e)=>{
   e.preventDefault();
   const delta = Math.sign(e.deltaY);
@@ -505,7 +582,7 @@ canvas.addEventListener("wheel", (e)=>{
   render();
 },{ passive:false });
 
-// Spacebar pan mode
+// Spacebar pan
 window.addEventListener("keydown", (e)=>{
   if (e.code === "Space"){
     isPanningMode = true;
@@ -519,7 +596,7 @@ window.addEventListener("keyup", (e)=>{
   }
 });
 
-// --------- Tools & UI ----------
+// --------- Tools/UI ----------
 function setTool(next){
   tool = next;
   toolSelectBtn.classList.toggle("active", tool==="select");
@@ -546,13 +623,14 @@ dropModeBtn.onclick = ()=>{
   dropModeBtn.textContent = dropMode ? "Drop on Tap" : "Drop Off";
 };
 
-function toast(msg){
-  statusEl.textContent = msg;
-  setTimeout(updateStatus, 1200);
-}
-function updateStatus(){
-  statusEl.textContent = navigator.onLine ? "Online (cached for offline)" : "Offline (running from cache)";
-}
+// Film view toggle
+toggleFilmViewBtn.onclick = ()=>{
+  filmOn = !filmOn;
+  workspaceEl.classList.toggle("filmOn", filmOn);
+  filmPane.classList.toggle("hidden", !filmOn);
+  toggleFilmViewBtn.classList.toggle("active", filmOn);
+  toggleFilmViewBtn.textContent = filmOn ? "Film View On" : "Film View";
+};
 
 // --------- Tabs ----------
 function setTab(tab){
@@ -560,6 +638,15 @@ function setTab(tab){
   panels.forEach(p => p.classList.toggle("hidden", p.dataset.panel !== tab));
 }
 tabBtns.forEach(b => b.addEventListener("click", ()=> setTab(b.dataset.tab)));
+
+// --------- Status ----------
+function toast(msg){
+  statusEl.textContent = msg;
+  setTimeout(updateStatus, 1400);
+}
+function updateStatus(){
+  statusEl.textContent = navigator.onLine ? "Online (cached for offline)" : "Offline (running from cache)";
+}
 
 // --------- Library ----------
 function refreshBoardPicker(){
@@ -574,20 +661,22 @@ function refreshBoardPicker(){
   boardNameEl.value = currentBoard()?.name || "";
 }
 
-boardPicker.onchange = ()=>{
+boardPicker.onchange = async ()=>{
   appData.currentBoardId = boardPicker.value;
   saveApp();
   boardNameEl.value = currentBoard()?.name || "";
+  await renderClipLists();
   render();
 };
 
-newBoardBtn.onclick = ()=>{
+newBoardBtn.onclick = async ()=>{
   const b = newEmptyBoard(`Board ${appData.boards.length+1}`);
   appData.boards.unshift(b);
   appData.currentBoardId = b.id;
   saveApp();
   refreshBoardPicker();
   snapshotBoard();
+  await renderClipLists();
   render();
   toast("New board created.");
 };
@@ -601,21 +690,23 @@ saveBoardNameBtn.onclick = ()=>{
   toast("Renamed.");
 };
 
-duplicateBoardBtn.onclick = ()=>{
+duplicateBoardBtn.onclick = async ()=>{
   const b = currentBoard();
   if (!b) return;
   const copy = newEmptyBoard(`${b.name} (Copy)`);
   copy.players = JSON.parse(JSON.stringify(b.players));
   copy.strokes = JSON.parse(JSON.stringify(b.strokes));
+  copy.clipIds = [...(b.clipIds || [])]; // copy clip refs
   appData.boards.unshift(copy);
   appData.currentBoardId = copy.id;
   saveApp();
   refreshBoardPicker();
+  await renderClipLists();
   render();
   toast("Duplicated.");
 };
 
-deleteBoardBtn.onclick = ()=>{
+deleteBoardBtn.onclick = async ()=>{
   if (appData.boards.length <= 1) return toast("Keep at least 1 board.");
   const b = currentBoard();
   if (!b) return;
@@ -625,6 +716,7 @@ deleteBoardBtn.onclick = ()=>{
   appData.currentBoardId = appData.boards[0].id;
   saveApp();
   refreshBoardPicker();
+  await renderClipLists();
   render();
   toast("Deleted.");
 };
@@ -673,16 +765,16 @@ function applyTemplate(t){
   toast(`Applied: ${t.name}`);
 }
 
-// Template builders
+// Template helpers (vertical layout anchors)
 function baseFieldAnchors(){
   const margin=90;
   const top=margin, left=margin, right=canvas.width-margin, bottom=canvas.height-margin;
   const midX=(left+right)/2;
   const midY=(top+bottom)/2;
   const hashInset=210;
-  const hashY1=top+hashInset;
-  const hashY2=bottom-hashInset;
-  return {top,left,right,bottom,midX,midY,hashY1,hashY2};
+  const hashX1 = left + hashInset;
+  const hashX2 = right - hashInset;
+  return {top,left,right,bottom,midX,midY,hashX1,hashX2};
 }
 function mkP(x,y,label,side,layer="base"){
   return { id:crypto.randomUUID(), x,y, r:28, label, side, layer };
@@ -698,10 +790,10 @@ function buildOffense2x2(){
     mkP(a.midX-150, losY, "LT", "O"),
     mkP(a.midX+95, losY, "RG", "O"),
     mkP(a.midX+150, losY, "RT", "O"),
-    mkP(a.left+240, a.hashY1-10, "X", "O"),
-    mkP(a.left+360, a.hashY1+45, "Y", "O"),
-    mkP(a.right-240, a.hashY1-10, "Z", "O"),
-    mkP(a.right-360, a.hashY1+45, "H", "O"),
+    mkP(a.hashX1-25, losY-140, "X", "O"),
+    mkP(a.hashX1+55, losY-70, "Y", "O"),
+    mkP(a.hashX2+25, losY-140, "Z", "O"),
+    mkP(a.hashX2-55, losY-70, "H", "O"),
   ];
   return { players, strokes:[] };
 }
@@ -716,10 +808,10 @@ function buildOffense3x1(){
     mkP(a.midX-150, losY, "LT", "O"),
     mkP(a.midX+95, losY, "RG", "O"),
     mkP(a.midX+150, losY, "RT", "O"),
-    mkP(a.right-260, a.hashY1-10, "X", "O"),
-    mkP(a.right-360, a.hashY1+35, "Y", "O"),
-    mkP(a.right-450, a.hashY1+80, "H", "O"),
-    mkP(a.left+260, a.hashY1-10, "Z", "O"),
+    mkP(a.hashX2+25, losY-160, "X", "O"),
+    mkP(a.hashX2-30, losY-105, "Y", "O"),
+    mkP(a.hashX2-85, losY-50, "H", "O"),
+    mkP(a.hashX1-25, losY-160, "Z", "O"),
   ];
   return { players, strokes:[] };
 }
@@ -734,10 +826,10 @@ function buildOffenseBunch(){
     mkP(a.midX-150, losY, "LT", "O"),
     mkP(a.midX+95, losY, "RG", "O"),
     mkP(a.midX+150, losY, "RT", "O"),
-    mkP(a.right-300, a.hashY1+15, "X", "O"),
-    mkP(a.right-340, a.hashY1+55, "Y", "O"),
-    mkP(a.right-380, a.hashY1+95, "H", "O"),
-    mkP(a.left+260, a.hashY1-10, "Z", "O"),
+    mkP(a.hashX2-20, losY-135, "X", "O"),
+    mkP(a.hashX2-70, losY-95, "Y", "O"),
+    mkP(a.hashX2-40, losY-55, "H", "O"),
+    mkP(a.hashX1-25, losY-160, "Z", "O"),
   ];
   return { players, strokes:[] };
 }
@@ -751,11 +843,11 @@ function buildOffenseEmpty(){
     mkP(a.midX-150, losY, "LT", "O"),
     mkP(a.midX+95, losY, "RG", "O"),
     mkP(a.midX+150, losY, "RT", "O"),
-    mkP(a.left+240, a.hashY1-10, "X", "O"),
-    mkP(a.left+360, a.hashY1+45, "Y", "O"),
-    mkP(a.right-240, a.hashY1-10, "Z", "O"),
-    mkP(a.right-360, a.hashY1+45, "H", "O"),
-    mkP(a.midX, a.hashY2-40, "RB", "O"),
+    mkP(a.hashX1-25, losY-160, "X", "O"),
+    mkP(a.hashX1+55, losY-95, "Y", "O"),
+    mkP(a.hashX2+25, losY-160, "Z", "O"),
+    mkP(a.hashX2-55, losY-95, "H", "O"),
+    mkP(a.midX, losY-210, "RB", "O"),
   ];
   return { players, strokes:[] };
 }
@@ -763,15 +855,15 @@ function buildPunt(){
   const a = baseFieldAnchors();
   const losY = a.midY + 10;
   const players = [
-    mkP(a.midX, losY+80, "P", "ST"),
-    mkP(a.midX, losY+35, "PP", "ST"),
+    mkP(a.midX, losY+90, "P", "ST"),
+    mkP(a.midX, losY+45, "PP", "ST"),
     mkP(a.midX-40, losY, "LS", "ST"),
     mkP(a.midX-95, losY, "G", "ST"),
     mkP(a.midX-150, losY, "T", "ST"),
     mkP(a.midX+95, losY, "G", "ST"),
     mkP(a.midX+150, losY, "T", "ST"),
-    mkP(a.left+260, a.hashY1+20, "GUN", "ST"),
-    mkP(a.right-260, a.hashY1+20, "GUN", "ST"),
+    mkP(a.hashX1, losY-120, "GUN", "ST"),
+    mkP(a.hashX2, losY-120, "GUN", "ST"),
   ];
   return { players, strokes:[] };
 }
@@ -779,7 +871,7 @@ function buildKickoff(){
   const a = baseFieldAnchors();
   const y = a.midY + 10;
   const players = [
-    mkP(a.midX, y+80, "K", "ST"),
+    mkP(a.midX, y+90, "K", "ST"),
     mkP(a.left+220, y, "L5", "ST"),
     mkP(a.left+360, y, "L4", "ST"),
     mkP(a.left+500, y, "L3", "ST"),
@@ -855,23 +947,9 @@ function renderPractice(){
   });
 }
 
-addPeriodBtn.onclick = ()=>{
-  appData.practice.periods.push({ time:"", title:"", note:"" });
-  renderPractice();
-};
-
-clearPracticeBtn.onclick = ()=>{
-  if (!confirm("Clear practice plan?")) return;
-  appData.practice = { date:"", periods:[] };
-  renderPractice();
-  saveApp();
-};
-
-savePracticeBtn.onclick = ()=>{
-  appData.practice.date = practiceDateEl.value || "";
-  saveApp();
-  toast("Practice plan saved.");
-};
+addPeriodBtn.onclick = ()=> { appData.practice.periods.push({ time:"", title:"", note:"" }); renderPractice(); };
+clearPracticeBtn.onclick = ()=> { if(confirm("Clear practice plan?")){ appData.practice={date:"",periods:[]}; renderPractice(); saveApp(); } };
+savePracticeBtn.onclick = ()=> { appData.practice.date = practiceDateEl.value || ""; saveApp(); toast("Practice plan saved."); };
 
 // --------- Export ----------
 exportPngBtn.onclick = ()=>{
@@ -908,10 +986,7 @@ exportPdfBtn.onclick = ()=>{
           th,td{ border-bottom:1px solid #eee; padding:8px 6px; text-align:left; vertical-align:top; }
           th{ font-size:12px; color:#444; text-transform:uppercase; letter-spacing:0.4px; }
           .small{ font-size:12px; color:#555; font-weight:700; }
-          @media print{
-            body{ margin:14mm; }
-            .card{ break-inside: avoid; }
-          }
+          @media print{ body{ margin:14mm; } .card{ break-inside: avoid; } }
         </style>
       </head>
       <body>
@@ -928,9 +1003,7 @@ exportPdfBtn.onclick = ()=>{
 
           ${practiceHtml}
         </div>
-        <script>
-          setTimeout(()=> window.print(), 400);
-        </script>
+        <script>setTimeout(()=> window.print(), 400);</script>
       </body>
     </html>
   `);
@@ -942,29 +1015,156 @@ function buildPracticeHtmlForPrint(){
   const periods = pr.periods || [];
   if (periods.length === 0) return "";
 
-  const rows = periods.map(p=>{
-    return `
-      <tr>
-        <td style="width:80px"><strong>${escapeHtml(p.time||"")}</strong></td>
-        <td style="width:180px"><strong>${escapeHtml(p.title||"")}</strong></td>
-        <td>${escapeHtml(p.note||"")}</td>
-      </tr>
-    `;
-  }).join("");
+  const rows = periods.map(p=>`
+    <tr>
+      <td style="width:80px"><strong>${escapeHtml(p.time||"")}</strong></td>
+      <td style="width:180px"><strong>${escapeHtml(p.title||"")}</strong></td>
+      <td>${escapeHtml(p.note||"")}</td>
+    </tr>
+  `).join("");
 
   return `
     <div class="card">
       <div class="small">Practice Plan ${pr.date ? "• " + escapeHtml(pr.date) : ""}</div>
       <table>
-        <thead>
-          <tr><th>Time</th><th>Period</th><th>Notes</th></tr>
-        </thead>
-        <tbody>
-          ${rows}
-        </tbody>
+        <thead><tr><th>Time</th><th>Period</th><th>Notes</th></tr></thead>
+        <tbody>${rows}</tbody>
       </table>
     </div>
   `;
+}
+
+// --------- Film: import / list / play ----------
+addClipsBtn.onclick = ()=> clipPicker.click();
+
+clipPicker.addEventListener("change", async ()=>{
+  const files = Array.from(clipPicker.files || []);
+  if (files.length === 0) return;
+
+  const b = currentBoard();
+  if (!b) return;
+
+  toast(`Importing ${files.length} clip(s)…`);
+  for (const f of files){
+    const blob = f; // File is a Blob
+    const id = crypto.randomUUID();
+    await idbPutClip({
+      id,
+      name: f.name || "Clip",
+      type: f.type || "video/mp4",
+      blob,
+      createdAt: Date.now()
+    });
+    b.clipIds.push(id);
+  }
+  saveApp();
+  clipPicker.value = "";
+  await renderClipLists();
+  toast("Clips imported.");
+});
+
+clearClipsBtn.onclick = async ()=>{
+  const b = currentBoard();
+  if (!b) return;
+  if (!confirm("Remove all clips from this board? (Deletes the offline clips too)")) return;
+
+  // delete from DB
+  for (const id of (b.clipIds || [])){
+    await idbDeleteClip(id);
+  }
+  b.clipIds = [];
+  saveApp();
+
+  stopCurrentClip();
+  await renderClipLists();
+  toast("Clips cleared.");
+};
+
+async function renderClipLists(){
+  const b = currentBoard();
+  if (!b) return;
+
+  // Left panel list
+  clipListEl.innerHTML = "";
+  const clips = await idbListClipsByIds(b.clipIds || []);
+  if (clips.length === 0){
+    clipListEl.innerHTML = `<div class="hint">No clips yet. Tap Import.</div>`;
+  } else {
+    for (const c of clips){
+      const row = document.createElement("div");
+      row.className = "clipRow";
+      row.innerHTML = `
+        <div>
+          <div class="clipName">${escapeHtml(c.name)}</div>
+          <div class="clipMeta">${new Date(c.createdAt).toLocaleString()}</div>
+        </div>
+        <div class="clipBtns">
+          <button class="btn small" data-act="play">Play</button>
+          <button class="btn small danger" data-act="del">Del</button>
+        </div>
+      `;
+      row.querySelector('[data-act="play"]').onclick = ()=> playClipById(c.id);
+      row.querySelector('[data-act="del"]').onclick = async ()=>{
+        if (!confirm("Delete this clip?")) return;
+        await idbDeleteClip(c.id);
+        b.clipIds = (b.clipIds || []).filter(x => x !== c.id);
+        saveApp();
+        if (currentClipId === c.id) stopCurrentClip();
+        await renderClipLists();
+      };
+      clipListEl.appendChild(row);
+    }
+  }
+
+  // Film pane mini list
+  filmMiniList.innerHTML = "";
+  if (clips.length === 0){
+    filmMiniList.innerHTML = `<div class="hint">No clips yet.</div>`;
+  } else {
+    for (const c of clips){
+      const btn = document.createElement("button");
+      btn.className = "filmMiniBtn";
+      btn.textContent = c.name;
+      btn.classList.toggle("active", c.id === currentClipId);
+      btn.onclick = ()=> playClipById(c.id);
+      filmMiniList.appendChild(btn);
+    }
+  }
+}
+
+async function playClipById(id){
+  const clip = await idbGetClip(id);
+  if (!clip) return toast("Clip not found.");
+
+  // Clean up old object URL
+  if (currentClipUrl) URL.revokeObjectURL(currentClipUrl);
+
+  currentClipId = id;
+  currentClipUrl = URL.createObjectURL(clip.blob);
+  filmPlayer.src = currentClipUrl;
+
+  // turn on film view if off
+  if (!filmOn){
+    filmOn = true;
+    workspaceEl.classList.add("filmOn");
+    filmPane.classList.remove("hidden");
+    toggleFilmViewBtn.classList.add("active");
+    toggleFilmViewBtn.textContent = "Film View On";
+  }
+
+  await filmPlayer.play().catch(()=>{});
+  await renderClipLists();
+}
+
+function stopCurrentClip(){
+  if (currentClipUrl){
+    URL.revokeObjectURL(currentClipUrl);
+    currentClipUrl = null;
+  }
+  currentClipId = null;
+  filmPlayer.pause();
+  filmPlayer.removeAttribute("src");
+  filmPlayer.load();
 }
 
 // --------- Helpers ----------
@@ -972,52 +1172,34 @@ function escapeHtml(s){
   return String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;");
 }
 
-// --------- Service worker (iPad-friendly update flow) ----------
-async function registerSW(){
-  if (!("serviceWorker" in navigator)) return;
-  try{
-    const reg = await navigator.serviceWorker.register("./sw.js");
-
-    // If a new SW is waiting, activate it now
-    if (reg.waiting) reg.waiting.postMessage({ type: "SKIP_WAITING" });
-
-    reg.addEventListener("updatefound", () => {
-      const sw = reg.installing;
-      if (!sw) return;
-      sw.addEventListener("statechange", () => {
-        if (sw.state === "installed" && navigator.serviceWorker.controller) {
-          // New version installed — reload once to apply
-          window.location.reload();
-        }
-      });
-    });
-  }catch{}
-}
-
 // --------- Init ----------
 function init(){
   loadApp();
   refreshBoardPicker();
-
   initTemplateList();
-  setStencilTab("O");
 
-  // layers init
+  // layer init
   activeLayer = activeLayerEl.value;
   showLayer.base = showBaseEl.checked;
   showLayer.tags = showTagsEl.checked;
   showLayer.adj  = showAdjEl.checked;
 
+  // stencil init
+  setStencilTab("O");
+
   // practice init
   renderPractice();
 
-  // status
+  // status init
   updateStatus();
   window.addEventListener("online", updateStatus);
   window.addEventListener("offline", updateStatus);
 
-  registerSW();
-  snapshotBoard(); // seed undo stack
+  // board clips init
+  renderClipLists();
+
+  // seed undo + render
+  snapshotBoard();
   render();
 }
 
