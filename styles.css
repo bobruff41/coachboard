@@ -7,7 +7,6 @@
   --border:#202431;
   --border2:#2a3042;
   --accent:#3b82f6;
-  --danger:#ef4444;
 
   --brandFont: "Champion Serif", "Champion-Serif", Georgia, "Times New Roman", serif;
 }
@@ -56,7 +55,25 @@ body{ margin:0; background:var(--bg); color:var(--ink); }
   padding:12px;
 }
 
-.left{ display:flex; flex-direction:column; gap:12px; }
+/* Hide sidebar */
+.main.sidebarHidden{
+  grid-template-columns: 0 1fr;
+}
+.main.sidebarHidden #sidebar{
+  display:none;
+}
+
+.left{
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+  /* IMPORTANT: allow scrolling so tabs/sections never get cut off */
+  max-height: calc(100vh - 92px);
+  overflow:auto;
+  padding-right:6px;
+}
+.left::-webkit-scrollbar{ width:10px; }
+.left::-webkit-scrollbar-thumb{ background:#23283a; border-radius:999px; }
 
 .panel{
   background:var(--panel);
@@ -68,13 +85,24 @@ body{ margin:0; background:var(--bg); color:var(--ink); }
 .panelTitleRow{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; }
 .panelTitle{ font-weight:950; }
 
-.tabs{ display:grid; gap:8px; }
-.tabs5{ grid-template-columns:repeat(5,1fr); }
+/* Tabs row scroll */
+.tabsScroll{
+  display:flex;
+  gap:8px;
+  overflow-x:auto;
+  padding-bottom:2px;
+  -webkit-overflow-scrolling: touch;
+}
+.tabsScroll::-webkit-scrollbar{ height:8px; }
+.tabsScroll::-webkit-scrollbar-thumb{ background:#23283a; border-radius:999px; }
+
 .tab{
+  flex:0 0 auto;
+  min-width: 92px;
   border:1px solid var(--border2);
   background:var(--panel2);
   color:var(--ink);
-  padding:10px 8px;
+  padding:10px 10px;
   border-radius:12px;
   font-weight:950;
   font-size:13px;
@@ -121,36 +149,55 @@ body{ margin:0; background:var(--bg); color:var(--ink); }
   border:1px solid var(--border);
   border-radius:18px;
   overflow:hidden;
-  min-height: calc(100vh - 90px);
-}
-
-/* Workspace: canvas + optional film pane */
-.workspace{
-  display:grid;
-  grid-template-columns: 1fr;
-  height:100%;
-}
-.workspace.filmOn{
-  grid-template-columns: 1fr 440px;
-}
-.canvasPane{
+  min-height: calc(100vh - 92px);
   display:flex;
   align-items:center;
   justify-content:center;
+}
+
+/* Center the workspace */
+.workspace{
+  width:100%;
+  height:100%;
+  display:flex;
+  justify-content:center;
+  align-items:stretch;
+  gap:12px;
   padding:12px;
+}
+
+/* Film mode centered side-by-side */
+.canvasPane{
+  flex: 1 1 900px;
+  max-width: 1100px;
+  min-width: 420px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
 }
 #board{
   width:100%;
   height:auto;
-  touch-action:none;
+  touch-action:none; /* we handle pinch ourselves */
   display:block;
   border-radius:14px;
+  border:1px solid rgba(255,255,255,0.06);
 }
 
-/* Film pane */
+.pinchHint{
+  color: rgba(154,163,173,0.9);
+  font-size:12px;
+  font-weight:800;
+}
+
 .filmPane{
-  border-left:1px solid var(--border);
+  flex: 0 0 460px;
+  max-width: 520px;
+  border:1px solid var(--border);
   background:#0c0f16;
+  border-radius:18px;
   padding:12px;
   display:flex;
   flex-direction:column;
