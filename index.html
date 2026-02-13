@@ -31,6 +31,10 @@
 
       <div class="divider"></div>
 
+      <button id="toggleFilmView" class="btn">Film View</button>
+
+      <div class="divider"></div>
+
       <button id="exportPng" class="btn">Export PNG</button>
       <button id="exportPdf" class="btn">Export PDF</button>
     </div>
@@ -39,11 +43,12 @@
   <main class="main">
     <aside class="left">
       <div class="panel">
-        <div class="tabs">
+        <div class="tabs tabs5">
           <button class="tab active" data-tab="library">Library</button>
           <button class="tab" data-tab="templates">Templates</button>
           <button class="tab" data-tab="stencils">Stencils</button>
           <button class="tab" data-tab="practice">Practice</button>
+          <button class="tab" data-tab="film">Film</button>
         </div>
       </div>
 
@@ -158,6 +163,29 @@
         </div>
       </section>
 
+      <!-- FILM -->
+      <section class="panel tabPanel hidden" data-panel="film">
+        <div class="panelTitleRow">
+          <div class="panelTitle">Film Clips</div>
+          <button id="addClips" class="btn small">Import</button>
+        </div>
+
+        <div class="hint">
+          Import clips (MP4/MOV). Then enable “Film View” to see video side-by-side with the field.
+          Clips are stored offline on this device.
+        </div>
+
+        <div class="row" style="margin-top:10px;">
+          <label class="label">Clips</label>
+          <button id="clearClips" class="btn danger">Clear</button>
+        </div>
+
+        <div id="clipList" class="clipList"></div>
+
+        <!-- hidden file input -->
+        <input id="clipPicker" type="file" accept="video/*" multiple class="hidden" />
+      </section>
+
       <section class="panel">
         <div class="panelTitle">Status</div>
         <div id="status" class="status">Loading…</div>
@@ -165,7 +193,25 @@
     </aside>
 
     <section class="canvasWrap">
-      <canvas id="board" width="1600" height="1000"></canvas>
+      <div class="workspace">
+        <div class="canvasPane">
+          <canvas id="board" width="1600" height="1000"></canvas>
+        </div>
+
+        <div id="filmPane" class="filmPane hidden">
+          <div class="filmHeader">
+            <div class="filmTitle">Film View</div>
+            <div class="filmSub">Pick a clip on the left panel (Film tab) or below.</div>
+          </div>
+
+          <video id="filmPlayer" class="filmPlayer" controls playsinline></video>
+
+          <div class="filmMiniListWrap">
+            <div class="filmMiniTitle">Board Clips</div>
+            <div id="filmMiniList" class="filmMiniList"></div>
+          </div>
+        </div>
+      </div>
     </section>
   </main>
 
