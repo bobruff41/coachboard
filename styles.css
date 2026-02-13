@@ -8,6 +8,8 @@
   --border2:#2a3042;
   --accent:#3b82f6;
   --danger:#ef4444;
+
+  --brandFont: "Champion Serif", "Champion-Serif", Georgia, "Times New Roman", serif;
 }
 
 *{ box-sizing:border-box; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial; }
@@ -23,8 +25,14 @@ body{ margin:0; background:var(--bg); color:var(--ink); }
 
 .brand{ display:flex; gap:10px; align-items:center; }
 .logoDot{ width:12px; height:12px; border-radius:999px; background:var(--accent); box-shadow:0 0 18px rgba(59,130,246,0.6); }
-.brandName{ font-weight:900; letter-spacing:0.2px; }
-.brandSub{ color:var(--muted); font-size:12px; margin-top:2px; }
+.brandName{
+  font-family: var(--brandFont);
+  font-weight:900;
+  letter-spacing:0.2px;
+  font-size:18px;
+  line-height:1.1;
+}
+.brandSub{ color:var(--muted); font-size:12px; margin-top:2px; font-weight:800; }
 
 .toolbar{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
 .divider{ width:1px; height:26px; background:#242a3a; margin:0 4px; }
@@ -60,7 +68,8 @@ body{ margin:0; background:var(--bg); color:var(--ink); }
 .panelTitleRow{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; }
 .panelTitle{ font-weight:950; }
 
-.tabs{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
+.tabs{ display:grid; gap:8px; }
+.tabs5{ grid-template-columns:repeat(5,1fr); }
 .tab{
   border:1px solid var(--border2);
   background:var(--panel2);
@@ -68,10 +77,11 @@ body{ margin:0; background:var(--bg); color:var(--ink); }
   padding:10px 8px;
   border-radius:12px;
   font-weight:950;
+  font-size:13px;
 }
 .tab.active{ border-color:var(--accent); }
 
-.hidden{ display:none; }
+.hidden{ display:none !important; }
 
 .row{ display:flex; gap:10px; align-items:center; margin-bottom:10px; }
 .label{ width:60px; color:var(--muted); font-weight:900; }
@@ -111,16 +121,80 @@ body{ margin:0; background:var(--bg); color:var(--ink); }
   border:1px solid var(--border);
   border-radius:18px;
   overflow:hidden;
-  display:flex; align-items:center; justify-content:center;
   min-height: calc(100vh - 90px);
 }
 
+/* Workspace: canvas + optional film pane */
+.workspace{
+  display:grid;
+  grid-template-columns: 1fr;
+  height:100%;
+}
+.workspace.filmOn{
+  grid-template-columns: 1fr 440px;
+}
+.canvasPane{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:12px;
+}
 #board{
   width:100%;
   height:auto;
   touch-action:none;
   display:block;
+  border-radius:14px;
 }
+
+/* Film pane */
+.filmPane{
+  border-left:1px solid var(--border);
+  background:#0c0f16;
+  padding:12px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+.filmHeader{ padding:6px 6px 2px 6px; }
+.filmTitle{ font-weight:1000; }
+.filmSub{ color:var(--muted); font-size:12px; font-weight:800; margin-top:4px; }
+
+.filmPlayer{
+  width:100%;
+  aspect-ratio: 16 / 9;
+  background:#000;
+  border-radius:14px;
+  border:1px solid var(--border2);
+}
+
+.filmMiniListWrap{
+  border:1px solid var(--border2);
+  background:var(--panel2);
+  border-radius:14px;
+  padding:10px;
+  overflow:auto;
+  flex:1;
+}
+.filmMiniTitle{
+  font-size:12px;
+  color:var(--muted);
+  font-weight:1000;
+  letter-spacing:0.3px;
+  text-transform:uppercase;
+  margin-bottom:8px;
+}
+.filmMiniList{ display:flex; flex-direction:column; gap:8px; }
+.filmMiniBtn{
+  border:1px solid var(--border2);
+  background:#151a26;
+  color:var(--ink);
+  padding:10px 10px;
+  border-radius:14px;
+  font-weight:950;
+  text-align:left;
+}
+.filmMiniBtn.active{ border-color:var(--accent); }
 
 /* Stencils */
 .stencilTabs{ display:flex; gap:8px; margin:10px 0; }
@@ -170,3 +244,27 @@ body{ margin:0; background:var(--bg); color:var(--ink); }
   padding:10px 10px;
   font-weight:1000;
 }
+
+/* Film list in left panel */
+.clipList{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  margin-top:10px;
+  max-height: 320px;
+  overflow:auto;
+  border-radius:14px;
+}
+.clipRow{
+  border:1px solid var(--border2);
+  background:var(--panel2);
+  border-radius:14px;
+  padding:10px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:10px;
+}
+.clipName{ font-weight:1000; font-size:13px; line-height:1.2; }
+.clipMeta{ color:var(--muted); font-weight:900; font-size:12px; margin-top:3px; }
+.clipBtns{ display:flex; gap:8px; }
