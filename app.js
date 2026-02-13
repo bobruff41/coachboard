@@ -1,5 +1,6 @@
 // CoachBoard Pro (Offline-first PWA)
 // Features: Library boards, Undo/Redo, Zoom/Pan, Layers, Templates, Stencils, Practice plan, PNG + PDF export.
+// Plus: service-worker update handling for iPad (auto-reload on new version).
 
 const canvas = document.getElementById("board");
 const ctx = canvas.getContext("2d");
@@ -120,14 +121,12 @@ function loadApp(){
   }
   try{
     appData = JSON.parse(raw);
-    // safety defaults
     if (!appData.boards || appData.boards.length === 0){
       appData.boards = [newEmptyBoard("Board 1")];
       appData.currentBoardId = appData.boards[0].id;
     }
     if (!appData.currentBoardId) appData.currentBoardId = appData.boards[0].id;
 
-    // ensure undo/redo arrays exist
     for (const b of appData.boards){
       b.undo ||= [];
       b.redo ||= [];
@@ -137,14 +136,12 @@ function loadApp(){
     }
     appData.practice ||= { date:"", periods:[] };
   } catch {
-    // reset on bad data
     appData = { currentBoardId:null, boards:[newEmptyBoard("Board 1")], practice:{date:"", periods:[]} };
     appData.currentBoardId = appData.boards[0].id;
   }
 }
 
 function saveApp(){
-  // strip transient selection? keep it fine
   localStorage.setItem(STORAGE.app, JSON.stringify(appData));
 }
 
@@ -159,10 +156,9 @@ function markBoardUpdated(){
 function snapshotBoard(){
   const b = currentBoard();
   if (!b) return;
-  // keep snapshots small: store players/strokes only
   const snap = JSON.stringify({ players: b.players, strokes: b.strokes });
   b.undo.push(snap);
-  if (b.undo.length > 50) b.undo.shift();
+  if (b.undo.length > 60) b.undo.shift();
   b.redo = [];
 }
 
@@ -203,12 +199,6 @@ function toWorld(pt){
     y: (pt.y - view.ty) / view.scale
   };
 }
-function toScreen(pt){
-  return {
-    x: pt.x * view.scale + view.tx,
-    y: pt.y * view.scale + view.ty
-  };
-}
 
 function canvasPointFromEvent(e){
   const rect = canvas.getBoundingClientRect();
@@ -219,7 +209,6 @@ function canvasPointFromEvent(e){
 
 // --------- Drawing: Field ----------
 function drawField(){
-  // world space field: full canvas, but we draw in world coords by applying transform
   ctx.save();
   ctx.setTransform(view.scale, 0, 0, view.scale, view.tx, view.ty);
 
@@ -229,19 +218,16 @@ function drawField(){
   const margin = 90;
   const top = margin, left = margin, right = canvas.width - margin, bottom = canvas.height - margin;
 
-  // outer
   ctx.strokeStyle = "rgba(255,255,255,0.65)";
   ctx.lineWidth = 4;
   ctx.strokeRect(left, top, right-left, bottom-top);
 
-  // midfield
   ctx.lineWidth = 3;
   ctx.beginPath();
   ctx.moveTo((left+right)/2, top);
   ctx.lineTo((left+right)/2, bottom);
   ctx.stroke();
 
-  // hashes
   const hashInset = 210;
   const hashY1 = top + hashInset;
   const hashY2 = bottom - hashInset;
@@ -252,14 +238,12 @@ function drawField(){
     ctx.beginPath(); ctx.moveTo(x, hashY2); ctx.lineTo(x, hashY2 - 14); ctx.stroke();
   }
 
-  // yard lines
   ctx.strokeStyle = "rgba(255,255,255,0.35)";
   ctx.lineWidth = 2;
   for (let x = left; x <= right; x += 120){
     ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.stroke();
   }
 
-  // LOS guide
   ctx.setLineDash([10,10]);
   ctx.strokeStyle = "rgba(255,255,255,0.55)";
   ctx.beginPath();
@@ -363,10 +347,8 @@ function drawArrowHead(a,b){
 
 // --------- Render ----------
 function render(){
-  // Clear in screen space
   ctx.setTransform(1,0,0,1,0,0);
   ctx.clearRect(0,0,canvas.width, canvas.height);
-
   drawField();
   drawStrokes();
   drawPlayers();
@@ -418,7 +400,6 @@ canvas.addEventListener("pointerdown", (e)=>{
   const screenPt = canvasPointFromEvent(e);
   const w = toWorld(screenPt);
 
-  // Pan mode (Spacebar)
   if (isPanningMode){
     isPanning = true;
     panStart = { x: screenPt.x, y: screenPt.y, tx: view.tx, ty: view.ty };
@@ -438,7 +419,6 @@ canvas.addEventListener("pointerdown", (e)=>{
       return;
     }
 
-    // drop stencil if enabled
     if (dropMode){
       snapshotBoard();
       addPlayerAt(w.x, w.y, activeStencilLabel, activeStencilTab);
@@ -462,7 +442,6 @@ canvas.addEventListener("pointerdown", (e)=>{
     return;
   }
 
-  // route/block drawing
   snapshotBoard();
   drawingStroke = { id: crypto.randomUUID(), kind: tool, layer: activeLayer, points:[{x:w.x,y:w.y}] };
   b.strokes.push(drawingStroke);
@@ -520,7 +499,6 @@ canvas.addEventListener("wheel", (e)=>{
   view.scale = Math.min(2.2, Math.max(0.55, view.scale * zoomFactor));
 
   const after = toWorld(mouse);
-  // keep point under mouse stable
   view.tx += (after.x - before.x) * view.scale;
   view.ty += (after.y - before.y) * view.scale;
 
@@ -549,7 +527,6 @@ function setTool(next){
   toolBlockBtn.classList.toggle("active", tool==="block");
   toolTextBtn.classList.toggle("active", tool==="text");
 }
-
 toolSelectBtn.onclick = ()=> setTool("select");
 toolRouteBtn.onclick  = ()=> setTool("route");
 toolBlockBtn.onclick  = ()=> setTool("block");
@@ -610,7 +587,7 @@ newBoardBtn.onclick = ()=>{
   appData.currentBoardId = b.id;
   saveApp();
   refreshBoardPicker();
-  snapshotBoard(); // start undo history
+  snapshotBoard();
   render();
   toast("New board created.");
 };
@@ -696,7 +673,7 @@ function applyTemplate(t){
   toast(`Applied: ${t.name}`);
 }
 
-// Template builders (simple but clean)
+// Template builders
 function baseFieldAnchors(){
   const margin=90;
   const top=margin, left=margin, right=canvas.width-margin, bottom=canvas.height-margin;
@@ -713,7 +690,6 @@ function mkP(x,y,label,side,layer="base"){
 function buildOffense2x2(){
   const a = baseFieldAnchors();
   const losY = a.midY + 10;
-
   const players = [
     mkP(a.midX, losY+60, "QB", "O"),
     mkP(a.midX-60, losY+95, "RB", "O"),
@@ -722,7 +698,6 @@ function buildOffense2x2(){
     mkP(a.midX-150, losY, "LT", "O"),
     mkP(a.midX+95, losY, "RG", "O"),
     mkP(a.midX+150, losY, "RT", "O"),
-
     mkP(a.left+240, a.hashY1-10, "X", "O"),
     mkP(a.left+360, a.hashY1+45, "Y", "O"),
     mkP(a.right-240, a.hashY1-10, "Z", "O"),
@@ -733,7 +708,6 @@ function buildOffense2x2(){
 function buildOffense3x1(){
   const a = baseFieldAnchors();
   const losY = a.midY + 10;
-
   const players = [
     mkP(a.midX, losY+60, "QB", "O"),
     mkP(a.midX-60, losY+95, "RB", "O"),
@@ -742,12 +716,9 @@ function buildOffense3x1(){
     mkP(a.midX-150, losY, "LT", "O"),
     mkP(a.midX+95, losY, "RG", "O"),
     mkP(a.midX+150, losY, "RT", "O"),
-
-    // Trips right
     mkP(a.right-260, a.hashY1-10, "X", "O"),
     mkP(a.right-360, a.hashY1+35, "Y", "O"),
     mkP(a.right-450, a.hashY1+80, "H", "O"),
-    // Single left
     mkP(a.left+260, a.hashY1-10, "Z", "O"),
   ];
   return { players, strokes:[] };
@@ -755,7 +726,6 @@ function buildOffense3x1(){
 function buildOffenseBunch(){
   const a = baseFieldAnchors();
   const losY = a.midY + 10;
-
   const players = [
     mkP(a.midX, losY+60, "QB", "O"),
     mkP(a.midX-60, losY+95, "RB", "O"),
@@ -764,11 +734,9 @@ function buildOffenseBunch(){
     mkP(a.midX-150, losY, "LT", "O"),
     mkP(a.midX+95, losY, "RG", "O"),
     mkP(a.midX+150, losY, "RT", "O"),
-    // Bunch right
     mkP(a.right-300, a.hashY1+15, "X", "O"),
     mkP(a.right-340, a.hashY1+55, "Y", "O"),
     mkP(a.right-380, a.hashY1+95, "H", "O"),
-    // single left
     mkP(a.left+260, a.hashY1-10, "Z", "O"),
   ];
   return { players, strokes:[] };
@@ -776,7 +744,6 @@ function buildOffenseBunch(){
 function buildOffenseEmpty(){
   const a = baseFieldAnchors();
   const losY = a.midY + 10;
-
   const players = [
     mkP(a.midX, losY+60, "QB", "O"),
     mkP(a.midX-40, losY, "C", "O"),
@@ -784,19 +751,17 @@ function buildOffenseEmpty(){
     mkP(a.midX-150, losY, "LT", "O"),
     mkP(a.midX+95, losY, "RG", "O"),
     mkP(a.midX+150, losY, "RT", "O"),
-
     mkP(a.left+240, a.hashY1-10, "X", "O"),
     mkP(a.left+360, a.hashY1+45, "Y", "O"),
     mkP(a.right-240, a.hashY1-10, "Z", "O"),
     mkP(a.right-360, a.hashY1+45, "H", "O"),
-    mkP(a.midX, a.hashY2-40, "RB", "O"), // motion slot / empty marker
+    mkP(a.midX, a.hashY2-40, "RB", "O"),
   ];
   return { players, strokes:[] };
 }
 function buildPunt(){
   const a = baseFieldAnchors();
   const losY = a.midY + 10;
-
   const players = [
     mkP(a.midX, losY+80, "P", "ST"),
     mkP(a.midX, losY+35, "PP", "ST"),
@@ -833,7 +798,6 @@ function setStencilTab(tab){
   stencilTabBtns.forEach(b => b.classList.toggle("active", b.dataset.stab === tab));
   buildStencilGrid();
 }
-
 function setActiveStencil(label){
   activeStencilLabel = label;
   Array.from(document.querySelectorAll(".stencilBtn")).forEach(btn=>{
@@ -841,7 +805,6 @@ function setActiveStencil(label){
   });
   toast(`Stencil: ${label}`);
 }
-
 function buildStencilGrid(){
   stencilGrid.innerHTML = "";
   const labels = STENCILS[activeStencilTab] || [];
@@ -855,7 +818,6 @@ function buildStencilGrid(){
   }
   setActiveStencil(labels[0] || "X");
 }
-
 stencilTabBtns.forEach(b => b.addEventListener("click", ()=> setStencilTab(b.dataset.stab)));
 
 // --------- Practice ----------
@@ -876,7 +838,6 @@ function renderPractice(){
       <textarea class="input periodNote" rows="2" data-k="note" placeholder="Coaching points / script / emphasis">${escapeHtml(p.note||"")}</textarea>
     `;
 
-    // input handlers
     const inputs = Array.from(wrap.querySelectorAll("[data-k]"));
     inputs.forEach(inp=>{
       inp.addEventListener("input", ()=>{
@@ -914,7 +875,6 @@ savePracticeBtn.onclick = ()=>{
 
 // --------- Export ----------
 exportPngBtn.onclick = ()=>{
-  // Export current canvas as PNG (screen representation)
   const a = document.createElement("a");
   a.download = `${(currentBoard()?.name || "coachboard").replaceAll(" ","_")}.png`;
   a.href = canvas.toDataURL("image/png");
@@ -922,12 +882,10 @@ exportPngBtn.onclick = ()=>{
 };
 
 exportPdfBtn.onclick = ()=>{
-  // Create a print-friendly HTML page with diagram image + practice plan
   const b = currentBoard();
   if (!b) return;
 
   const img = canvas.toDataURL("image/png");
-
   const practiceHtml = buildPracticeHtmlForPrint();
 
   const w = window.open("", "_blank");
@@ -1010,3 +968,57 @@ function buildPracticeHtmlForPrint(){
 }
 
 // --------- Helpers ----------
+function escapeHtml(s){
+  return String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;");
+}
+
+// --------- Service worker (iPad-friendly update flow) ----------
+async function registerSW(){
+  if (!("serviceWorker" in navigator)) return;
+  try{
+    const reg = await navigator.serviceWorker.register("./sw.js");
+
+    // If a new SW is waiting, activate it now
+    if (reg.waiting) reg.waiting.postMessage({ type: "SKIP_WAITING" });
+
+    reg.addEventListener("updatefound", () => {
+      const sw = reg.installing;
+      if (!sw) return;
+      sw.addEventListener("statechange", () => {
+        if (sw.state === "installed" && navigator.serviceWorker.controller) {
+          // New version installed — reload once to apply
+          window.location.reload();
+        }
+      });
+    });
+  }catch{}
+}
+
+// --------- Init ----------
+function init(){
+  loadApp();
+  refreshBoardPicker();
+
+  initTemplateList();
+  setStencilTab("O");
+
+  // layers init
+  activeLayer = activeLayerEl.value;
+  showLayer.base = showBaseEl.checked;
+  showLayer.tags = showTagsEl.checked;
+  showLayer.adj  = showAdjEl.checked;
+
+  // practice init
+  renderPractice();
+
+  // status
+  updateStatus();
+  window.addEventListener("online", updateStatus);
+  window.addEventListener("offline", updateStatus);
+
+  registerSW();
+  snapshotBoard(); // seed undo stack
+  render();
+}
+
+init();
