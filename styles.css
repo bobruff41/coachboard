@@ -70,6 +70,8 @@ body { margin:0; background:var(--bg); color:var(--ink); }
   touch-action: none; /* important for Apple Pencil / touch */
   display:block;
 }
+
+/* ---- Stencil UI ---- */
 .stencilTabs{
   display:flex;
   gap:8px;
