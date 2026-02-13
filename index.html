@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>CoachBoard</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="styles.css" />
+  <meta name="theme-color" content="#111111" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">CoachBoard</div>
+
+    <div class="toolbar">
+      <button id="toolSelect" class="btn active">Select</button>
+      <button id="toolRoute" class="btn">Route</button>
+      <button id="toolBlock" class="btn">Block</button>
+
+      <div class="divider"></div>
+
+      <button id="addPlayer" class="btn">+ Player</button>
+      <button id="clearAll" class="btn danger">Clear</button>
+
+      <div class="divider"></div>
+
+      <button id="save" class="btn">Save</button>
+      <button id="load" class="btn">Load</button>
+      <button id="exportPng" class="btn">Export PNG</button>
+    </div>
+  </header>
+
+  <main class="main">
+    <aside class="left">
+      <div class="panel">
+        <div class="panelTitle">Stencil</div>
+        <div class="stencilRow">
+          <label class="label">Label</label>
+          <input id="playerLabel" class="input" value="X" maxlength="4" />
+        </div>
+        <div class="stencilRow">
+          <label class="label">Side</label>
+          <select id="playerSide" class="input">
+            <option value="O">Offense</option>
+            <option value="D">Defense</option>
+            <option value="ST">ST</option>
+          </select>
+        </div>
+        <div class="hint">
+          Tip: Use Apple Pencil. “Route/Block” draws lines. “Select” lets you move players.
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panelTitle">Offline</div>
+        <div id="offlineStatus" class="status">Checking…</div>
+        <div class="hint">
+          Once you open it once, it works offline (cached).
+        </div>
+      </div>
+    </aside>
+
+    <section class="canvasWrap">
+      <canvas id="board" width="1400" height="900"></canvas>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
+
