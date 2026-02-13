@@ -14,8 +14,22 @@ const exportPngBtn  = document.getElementById("exportPng");
 const playerLabelEl = document.getElementById("playerLabel");
 const playerSideEl  = document.getElementById("playerSide");
 const offlineStatus = document.getElementById("offlineStatus");
+const addFromStencilBtn = document.getElementById("addFromStencil");
+const stencilGrid = document.getElementById("stencilGrid");
+const tabBtns = Array.from(document.querySelectorAll(".tabBtn"));
 
-let tool = "select"; // select | route | block
+let tool = "select"; // -------- Stencils --------
+const STENCILS = {
+  O: ["QB","RB","FB","X","Z","Y","H","LT","LG","C","RG","RT"],
+  D: ["E","T","N","S","W","M","R","CB","FS","SS","NB"],
+  ST: ["P","K","LS","H","GUN","PP","KOR","KR","R5","L5"]
+};
+
+let activeStencilTab = "O";
+let activeStencilLabel = "X";   // default
+let activeStencilSide = "O";
+let dropMode = true; // when true, tapping the field drops the selected stencil
+ // select | route | block
 
 // Simple model (objects like Visio)
 const state = {
@@ -143,6 +157,53 @@ function drawArrowHead(a,b){
   ctx.closePath();
   ctx.fill();
 }
+function setActiveStencil(label, side){
+  activeStencilLabel = label;
+  activeStencilSide = side;
+
+  // also sync the old inputs (still useful)
+  playerLabelEl.value = label;
+  playerSideEl.value = side;
+
+  // highlight active button
+  Array.from(document.querySelectorAll(".stencilBtn")).forEach(btn=>{
+    const isActive = btn.dataset.label === label && btn.dataset.side === side;
+    btn.classList.toggle("active", isActive);
+  });
+}
+
+function buildStencilGrid(){
+  stencilGrid.innerHTML = "";
+  const labels = STENCILS[activeStencilTab] || [];
+  for (const lbl of labels){
+    const btn = document.createElement("button");
+    btn.className = "stencilBtn";
+    btn.textContent = lbl;
+    btn.dataset.label = lbl;
+    btn.dataset.side = activeStencilTab;
+    btn.onclick = () => setActiveStencil(lbl, activeStencilTab);
+    stencilGrid.appendChild(btn);
+  }
+  // keep selection sane after tab change
+  const fallback = labels[0] || "X";
+  setActiveStencil(fallback, activeStencilTab);
+}
+
+function setStencilTab(tab){
+  activeStencilTab = tab;
+  tabBtns.forEach(b => b.classList.toggle("active", b.dataset.tab === tab));
+  buildStencilGrid();
+}
+
+function addPlayerAt(x,y,label,side){
+  state.players.push({
+    id: crypto.randomUUID(),
+    x, y,
+    r: 28,
+    label: (label || "X").toUpperCase().slice(0,4),
+    side: side || "O"
+  });
+}
 
 function render() {
   drawField();
@@ -163,6 +224,15 @@ function setTool(next) {
 toolSelectBtn.onclick = () => setTool("select");
 toolRouteBtn.onclick  = () => setTool("route");
 toolBlockBtn.onclick  = () => setTool("block");
+tabBtns.forEach(btn => {
+  btn.addEventListener("click", () => setStencilTab(btn.dataset.tab));
+});
+
+addFromStencilBtn.onclick = () => {
+  dropMode = !dropMode;
+  addFromStencilBtn.classList.toggle("active", dropMode);
+  addFromStencilBtn.textContent = dropMode ? "Drop on Tap" : "Drop Off";
+};
 
 addPlayerBtn.onclick = () => {
   const label = (playerLabelEl.value || "X").toUpperCase().slice(0,4);
@@ -214,16 +284,33 @@ canvas.addEventListener("pointerdown", (e) => {
   const pt = canvasPointFromEvent(e);
 
   if (tool === "select") {
-    const p = hitPlayer(pt);
-    if (p) {
-      state.selectedPlayerId = p.id;
-      dragging = true;
-      dragOffset.x = pt.x - p.x;
-      dragOffset.y = pt.y - p.y;
-    } else {
-      state.selectedPlayerId = null;
-    }
+  // If drop mode is on, a tap that doesn't grab a player drops a stencil
+  const p = hitPlayer(pt);
+
+  if (p) {
+    state.selectedPlayerId = p.id;
+    dragging = true;
+    dragOffset.x = pt.x - p.x;
+    dragOffset.y = pt.y - p.y;
     render();
+    return;
+  }
+
+  if (dropMode) {
+    addPlayerAt(pt.x, pt.y, activeStencilLabel, activeStencilSide);
+    state.selectedPlayerId = null;
+    render();
+    return;
+  }
+
+  state.selectedPlayerId = null;
+  render();
+} else {
+  drawingStroke = { kind: tool, points: [pt] };
+  state.strokes.push(drawingStroke);
+  render();
+}
+
   } else {
     drawingStroke = { kind: tool, points: [pt] };
     state.strokes.push(drawingStroke);
@@ -306,4 +393,7 @@ window.addEventListener("offline", updateOfflineStatus);
 
 registerSW();
 updateOfflineStatus();
+setStencilTab("O"); // builds grid + sets default stencil
 render();
+
+
