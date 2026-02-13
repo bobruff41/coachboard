@@ -1,4 +1,4 @@
-// CoachBoard MVP: field + players + routes/blocks + offline save/load + PNG export
+// CoachBoard MVP: field + players + routes/blocks + offline save/load + PNG export + stencils
 const canvas = document.getElementById("board");
 const ctx = canvas.getContext("2d");
 
@@ -14,11 +14,14 @@ const exportPngBtn  = document.getElementById("exportPng");
 const playerLabelEl = document.getElementById("playerLabel");
 const playerSideEl  = document.getElementById("playerSide");
 const offlineStatus = document.getElementById("offlineStatus");
+
 const addFromStencilBtn = document.getElementById("addFromStencil");
 const stencilGrid = document.getElementById("stencilGrid");
 const tabBtns = Array.from(document.querySelectorAll(".tabBtn"));
 
-let tool = "select"; // -------- Stencils --------
+let tool = "select"; // select | route | block
+
+// -------- Stencils --------
 const STENCILS = {
   O: ["QB","RB","FB","X","Z","Y","H","LT","LG","C","RG","RT"],
   D: ["E","T","N","S","W","M","R","CB","FS","SS","NB"],
@@ -26,10 +29,9 @@ const STENCILS = {
 };
 
 let activeStencilTab = "O";
-let activeStencilLabel = "X";   // default
+let activeStencilLabel = "X";
 let activeStencilSide = "O";
-let dropMode = true; // when true, tapping the field drops the selected stencil
- // select | route | block
+let dropMode = true;
 
 // Simple model (objects like Visio)
 const state = {
@@ -42,27 +44,22 @@ const STORAGE_KEY = "coachboard_v1";
 
 // ---------- Field drawing ----------
 function drawField() {
-  // background
   ctx.fillStyle = "#0b3a22";
   ctx.fillRect(0,0,canvas.width, canvas.height);
 
-  // grid / landmarks (hash + numbers-ish)
   const margin = 80;
   const top = margin, left = margin, right = canvas.width - margin, bottom = canvas.height - margin;
 
-  // outer lines
   ctx.strokeStyle = "rgba(255,255,255,0.65)";
   ctx.lineWidth = 4;
   ctx.strokeRect(left, top, right-left, bottom-top);
 
-  // midfield line
   ctx.lineWidth = 3;
   ctx.beginPath();
   ctx.moveTo((left+right)/2, top);
   ctx.lineTo((left+right)/2, bottom);
   ctx.stroke();
 
-  // hashes (two horizontal rows)
   const hashInset = 190;
   const hashY1 = top + hashInset;
   const hashY2 = bottom - hashInset;
@@ -80,7 +77,6 @@ function drawField() {
     ctx.stroke();
   }
 
-  // yard lines
   ctx.strokeStyle = "rgba(255,255,255,0.35)";
   ctx.lineWidth = 2;
   for (let x = left; x <= right; x += 120) {
@@ -90,7 +86,6 @@ function drawField() {
     ctx.stroke();
   }
 
-  // LOS guide (dotted)
   ctx.setLineDash([10, 10]);
   ctx.strokeStyle = "rgba(255,255,255,0.5)";
   ctx.beginPath();
@@ -102,7 +97,6 @@ function drawField() {
 
 function drawPlayers() {
   for (const p of state.players) {
-    // color by side (still no “theme colors” needed—just subtle differences)
     const fill = p.side === "O" ? "rgba(255,255,255,0.92)" :
                  p.side === "D" ? "rgba(230,230,230,0.85)" :
                  "rgba(210,210,210,0.80)";
@@ -112,12 +106,10 @@ function drawPlayers() {
     ctx.fillStyle = fill;
     ctx.fill();
 
-    // outline
     ctx.lineWidth = (p.id === state.selectedPlayerId) ? 5 : 3;
     ctx.strokeStyle = (p.id === state.selectedPlayerId) ? "rgba(59,130,246,0.95)" : "rgba(0,0,0,0.75)";
     ctx.stroke();
 
-    // label
     ctx.fillStyle = "rgba(0,0,0,0.92)";
     ctx.font = "bold 22px system-ui";
     ctx.textAlign = "center";
@@ -131,13 +123,12 @@ function drawStrokes() {
     if (s.points.length < 2) continue;
 
     ctx.lineWidth = s.kind === "route" ? 5 : 7;
-    ctx.strokeStyle = s.kind === "route" ? "rgba(0,0,0,0.85)" : "rgba(0,0,0,0.85)";
+    ctx.strokeStyle = "rgba(0,0,0,0.85)";
     ctx.beginPath();
     ctx.moveTo(s.points[0].x, s.points[0].y);
     for (let i=1;i<s.points.length;i++) ctx.lineTo(s.points[i].x, s.points[i].y);
     ctx.stroke();
 
-    // arrow head for routes
     if (s.kind === "route") {
       const a = s.points[s.points.length-2];
       const b = s.points[s.points.length-1];
@@ -157,17 +148,23 @@ function drawArrowHead(a,b){
   ctx.closePath();
   ctx.fill();
 }
+
+function render() {
+  drawField();
+  drawStrokes();
+  drawPlayers();
+}
+
+// ---------- Stencil helpers ----------
 function setActiveStencil(label, side){
   activeStencilLabel = label;
   activeStencilSide = side;
 
-  // also sync the old inputs (still useful)
   playerLabelEl.value = label;
   playerSideEl.value = side;
 
-  // highlight active button
   Array.from(document.querySelectorAll(".stencilBtn")).forEach(btn=>{
-    const isActive = btn.dataset.label === label && btn.dataset.side === side;
+    const isActive = (btn.dataset.label === label && btn.dataset.side === side);
     btn.classList.toggle("active", isActive);
   });
 }
@@ -184,7 +181,6 @@ function buildStencilGrid(){
     btn.onclick = () => setActiveStencil(lbl, activeStencilTab);
     stencilGrid.appendChild(btn);
   }
-  // keep selection sane after tab change
   const fallback = labels[0] || "X";
   setActiveStencil(fallback, activeStencilTab);
 }
@@ -205,12 +201,6 @@ function addPlayerAt(x,y,label,side){
   });
 }
 
-function render() {
-  drawField();
-  drawStrokes();
-  drawPlayers();
-}
-
 // ---------- Tools ----------
 function setTool(next) {
   tool = next;
@@ -224,6 +214,7 @@ function setTool(next) {
 toolSelectBtn.onclick = () => setTool("select");
 toolRouteBtn.onclick  = () => setTool("route");
 toolBlockBtn.onclick  = () => setTool("block");
+
 tabBtns.forEach(btn => {
   btn.addEventListener("click", () => setStencilTab(btn.dataset.tab));
 });
@@ -237,14 +228,7 @@ addFromStencilBtn.onclick = () => {
 addPlayerBtn.onclick = () => {
   const label = (playerLabelEl.value || "X").toUpperCase().slice(0,4);
   const side = playerSideEl.value;
-  state.players.push({
-    id: crypto.randomUUID(),
-    x: canvas.width/2,
-    y: canvas.height/2,
-    r: 28,
-    label,
-    side
-  });
+  addPlayerAt(canvas.width/2, canvas.height/2, label, side);
   render();
 };
 
@@ -284,33 +268,26 @@ canvas.addEventListener("pointerdown", (e) => {
   const pt = canvasPointFromEvent(e);
 
   if (tool === "select") {
-  // If drop mode is on, a tap that doesn't grab a player drops a stencil
-  const p = hitPlayer(pt);
+    const p = hitPlayer(pt);
 
-  if (p) {
-    state.selectedPlayerId = p.id;
-    dragging = true;
-    dragOffset.x = pt.x - p.x;
-    dragOffset.y = pt.y - p.y;
-    render();
-    return;
-  }
+    if (p) {
+      state.selectedPlayerId = p.id;
+      dragging = true;
+      dragOffset.x = pt.x - p.x;
+      dragOffset.y = pt.y - p.y;
+      render();
+      return;
+    }
 
-  if (dropMode) {
-    addPlayerAt(pt.x, pt.y, activeStencilLabel, activeStencilSide);
+    if (dropMode) {
+      addPlayerAt(pt.x, pt.y, activeStencilLabel, activeStencilSide);
+      state.selectedPlayerId = null;
+      render();
+      return;
+    }
+
     state.selectedPlayerId = null;
     render();
-    return;
-  }
-
-  state.selectedPlayerId = null;
-  render();
-} else {
-  drawingStroke = { kind: tool, points: [pt] };
-  state.strokes.push(drawingStroke);
-  render();
-}
-
   } else {
     drawingStroke = { kind: tool, points: [pt] };
     state.strokes.push(drawingStroke);
@@ -346,7 +323,7 @@ canvas.addEventListener("pointerup", () => {
 saveBtn.onclick = () => {
   const payload = JSON.stringify({ players: state.players, strokes: state.strokes });
   localStorage.setItem(STORAGE_KEY, payload);
-  toast("Saved offline on this iPad/browser.");
+  toast("Saved offline on this browser.");
 };
 
 loadBtn.onclick = () => {
@@ -393,7 +370,5 @@ window.addEventListener("offline", updateOfflineStatus);
 
 registerSW();
 updateOfflineStatus();
-setStencilTab("O"); // builds grid + sets default stencil
+setStencilTab("O");
 render();
-
-
