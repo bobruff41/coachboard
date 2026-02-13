@@ -1,92 +1,139 @@
-:root { --bg:#0b0c10; --panel:#13151a; --ink:#e9eef5; --muted:#9aa3ad; --accent:#3b82f6; --danger:#ef4444; }
+:root{
+  --bg:#0b0c10;
+  --panel:#13151a;
+  --panel2:#0f1117;
+  --ink:#e9eef5;
+  --muted:#9aa3ad;
+  --border:#202431;
+  --border2:#2a3042;
+  --accent:#3b82f6;
+  --danger:#ef4444;
+}
 
-* { box-sizing: border-box; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; }
-body { margin:0; background:var(--bg); color:var(--ink); }
+*{ box-sizing:border-box; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial; }
+body{ margin:0; background:var(--bg); color:var(--ink); }
 
 .topbar{
-  position: sticky; top: 0;
+  position:sticky; top:0; z-index:10;
   display:flex; align-items:center; justify-content:space-between;
   padding:12px 14px;
-  background:#0f1117; border-bottom:1px solid #202431;
-  z-index:10;
+  background:var(--panel2);
+  border-bottom:1px solid var(--border);
 }
-.brand{ font-weight:700; letter-spacing:0.3px; }
+
+.brand{ display:flex; gap:10px; align-items:center; }
+.logoDot{ width:12px; height:12px; border-radius:999px; background:var(--accent); box-shadow:0 0 18px rgba(59,130,246,0.6); }
+.brandName{ font-weight:900; letter-spacing:0.2px; }
+.brandSub{ color:var(--muted); font-size:12px; margin-top:2px; }
+
 .toolbar{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
 .divider{ width:1px; height:26px; background:#242a3a; margin:0 4px; }
 
 .btn{
-  border:1px solid #2a3042;
+  border:1px solid var(--border2);
   background:#151a26;
   color:var(--ink);
-  padding:8px 10px;
-  border-radius:10px;
-  font-weight:600;
+  padding:9px 11px;
+  border-radius:12px;
+  font-weight:800;
 }
-.btn.active{ border-color: var(--accent); }
-.btn.danger{ border-color: #3a1f24; background:#201117; color:#ffd3d3; }
+.btn.small{ padding:7px 9px; border-radius:10px; font-weight:800; }
+.btn.active{ border-color:var(--accent); }
+.btn.danger{ border-color:#3a1f24; background:#201117; color:#ffd3d3; }
 
 .main{
   display:grid;
-  grid-template-columns: 280px 1fr;
+  grid-template-columns: 320px 1fr;
   gap:12px;
   padding:12px;
 }
+
 .left{ display:flex; flex-direction:column; gap:12px; }
+
 .panel{
   background:var(--panel);
-  border:1px solid #202431;
-  border-radius:14px;
+  border:1px solid var(--border);
+  border-radius:16px;
   padding:12px;
 }
-.panelTitle{ font-weight:800; margin-bottom:10px; }
-.stencilRow{ display:flex; align-items:center; gap:10px; margin-bottom:10px; }
-.label{ width:60px; color:var(--muted); font-weight:700; }
+
+.panelTitleRow{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; }
+.panelTitle{ font-weight:950; }
+
+.tabs{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
+.tab{
+  border:1px solid var(--border2);
+  background:var(--panel2);
+  color:var(--ink);
+  padding:10px 8px;
+  border-radius:12px;
+  font-weight:950;
+}
+.tab.active{ border-color:var(--accent); }
+
+.hidden{ display:none; }
+
+.row{ display:flex; gap:10px; align-items:center; margin-bottom:10px; }
+.label{ width:60px; color:var(--muted); font-weight:900; }
+
 .input{
   width:100%;
-  padding:8px 10px;
-  border-radius:10px;
-  border:1px solid #2a3042;
-  background:#0f1117;
+  padding:9px 10px;
+  border-radius:12px;
+  border:1px solid var(--border2);
+  background:var(--panel2);
   color:var(--ink);
   outline:none;
+  font-weight:750;
 }
-.hint{ color:var(--muted); font-size:13px; line-height:1.35; }
-.status{ font-weight:800; padding:8px 10px; border-radius:10px; background:#0f1117; border:1px solid #2a3042; }
+
+.hint{ color:var(--muted); font-size:13px; line-height:1.35; margin-top:10px; }
+.status{ font-weight:950; padding:10px 10px; border-radius:12px; background:var(--panel2); border:1px solid var(--border2); }
+
+.btnGrid{ display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px; }
+.templateList{ display:flex; flex-direction:column; gap:8px; margin-top:8px; }
+.templateBtn{
+  display:flex; justify-content:space-between; align-items:center;
+  border:1px solid var(--border2);
+  background:var(--panel2);
+  color:var(--ink);
+  padding:10px 10px;
+  border-radius:14px;
+  font-weight:950;
+}
+.badge{ font-size:12px; color:var(--muted); font-weight:900; }
+
+.toggles{ display:flex; gap:10px; flex-wrap:wrap; }
+.toggle{ display:flex; gap:6px; align-items:center; color:var(--muted); font-weight:900; }
 
 .canvasWrap{
-  background:#0f1117;
-  border:1px solid #202431;
-  border-radius:16px;
+  background:var(--panel2);
+  border:1px solid var(--border);
+  border-radius:18px;
   overflow:hidden;
-  display:flex;
-  align-items:center;
-  justify-content:center;
+  display:flex; align-items:center; justify-content:center;
   min-height: calc(100vh - 90px);
 }
 
 #board{
   width:100%;
   height:auto;
-  touch-action: none; /* important for Apple Pencil / touch */
+  touch-action:none;
   display:block;
 }
 
-/* ---- Stencil UI ---- */
-.stencilTabs{
-  display:flex;
-  gap:8px;
-  margin: 10px 0;
-}
+/* Stencils */
+.stencilTabs{ display:flex; gap:8px; margin:10px 0; }
 .tabBtn{
   flex:1;
-  border:1px solid #2a3042;
-  background:#0f1117;
+  border:1px solid var(--border2);
+  background:var(--panel2);
   color:var(--ink);
-  padding:8px 10px;
-  border-radius:10px;
-  font-weight:800;
+  padding:9px 10px;
+  border-radius:12px;
+  font-weight:950;
 }
-.tabBtn.active{ border-color: var(--accent); }
+.tabBtn.active{ border-color:var(--accent); }
 
 .stencilGrid{
   display:grid;
@@ -94,14 +141,32 @@ body { margin:0; background:var(--bg); color:var(--ink); }
   gap:8px;
 }
 .stencilBtn{
-  border:1px solid #2a3042;
+  border:1px solid var(--border2);
   background:#151a26;
   color:var(--ink);
-  padding:10px 8px;
-  border-radius:12px;
-  font-weight:900;
+  padding:11px 8px;
+  border-radius:14px;
+  font-weight:1000;
   text-align:center;
 }
-.stencilBtn.active{
-  border-color: var(--accent);
+.stencilBtn.active{ border-color:var(--accent); }
+
+/* Practice */
+.periodList{ display:flex; flex-direction:column; gap:8px; }
+.period{
+  border:1px solid var(--border2);
+  background:var(--panel2);
+  border-radius:14px;
+  padding:10px;
+}
+.periodTop{ display:grid; grid-template-columns: 80px 1fr 44px; gap:8px; align-items:center; }
+.periodSmall{ padding:9px 10px; border-radius:12px; border:1px solid var(--border2); background:#0b0c10; color:var(--ink); font-weight:850; }
+.periodNote{ margin-top:8px; width:100%; }
+.iconBtn{
+  border:1px solid #3a1f24;
+  background:#201117;
+  color:#ffd3d3;
+  border-radius:12px;
+  padding:10px 10px;
+  font-weight:1000;
 }
