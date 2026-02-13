@@ -1,9 +1,12 @@
-// CoachBoard Pro + Film Clips (Offline-first)
-// Film: import video clips -> store offline (IndexedDB) -> side-by-side field + player.
+// CoachBoard Pro + Film + Pinch Zoom + Sidebar Toggle
 
 const canvas = document.getElementById("board");
 const ctx = canvas.getContext("2d");
+
 const statusEl = document.getElementById("status");
+const appMain = document.getElementById("appMain");
+const sidebar = document.getElementById("sidebar");
+const toggleSidebarBtn = document.getElementById("toggleSidebar");
 
 // Toolbar
 const undoBtn = document.getElementById("undo");
@@ -56,21 +59,42 @@ const clipPicker = document.getElementById("clipPicker");
 const filmPane = document.getElementById("filmPane");
 const filmPlayer = document.getElementById("filmPlayer");
 const filmMiniList = document.getElementById("filmMiniList");
-const workspaceEl = document.querySelector(".workspace");
 
 // Storage keys
-const STORAGE = { app: "coachboard_pro_v2" };
+const STORAGE = {
+  app: "coachboard_pro_v3",
+  ui:  "coachboard_ui_v1"
+};
 
 // --------- App State ----------
 let tool = "select"; // select | route | block | text
+
+// View transform (zoom/pan)
 let view = { scale: 1.0, tx: 0, ty: 0 };
+
+// Desktop pan mode
 let isPanningMode = false;
 let isPanning = false;
 let panStart = { x:0, y:0, tx:0, ty:0 };
+
+// Drawing/selection
 let dragging = false;
 let dragOffset = {x:0,y:0};
 let drawingStroke = null;
 
+// Touch gestures (pinch/pan)
+const pointers = new Map(); // pointerId -> {x,y}
+let pinch = {
+  active: false,
+  startDist: 0,
+  startScale: 1,
+  startTx: 0,
+  startTy: 0,
+  mid: {x:0,y:0},
+  panOnly: false
+};
+
+// Stencils/layers
 let dropMode = true;
 let activeLayer = "base";
 let showLayer = { base:true, tags:true, adj:true };
@@ -83,12 +107,12 @@ const STENCILS = {
 let activeStencilTab = "O";
 let activeStencilLabel = "QB";
 
-// Film state
+// Film
 let filmOn = false;
 let currentClipUrl = null;
 let currentClipId = null;
 
-// App data: boards + practice
+// App data
 let appData = {
   currentBoardId: null,
   boards: [],
@@ -106,7 +130,7 @@ function newEmptyBoard(name="New Board"){
     selectedId: null,
     undo: [],
     redo: [],
-    clipIds: [] // <-- per-board clips
+    clipIds: []
   };
 }
 function currentBoard(){
@@ -114,10 +138,7 @@ function currentBoard(){
 }
 
 // --------- IndexedDB (film clips) ----------
-const CLIP_DB = {
-  name: "coachboard_clips_v1",
-  store: "clips"
-};
+const CLIP_DB = { name: "coachboard_clips_v1", store: "clips" };
 
 function openClipDB(){
   return new Promise((resolve, reject)=>{
@@ -132,7 +153,6 @@ function openClipDB(){
     req.onerror = ()=> reject(req.error);
   });
 }
-
 async function idbPutClip(clip){
   const db = await openClipDB();
   return new Promise((resolve, reject)=>{
@@ -142,7 +162,6 @@ async function idbPutClip(clip){
     tx.onerror = ()=> reject(tx.error);
   });
 }
-
 async function idbGetClip(id){
   const db = await openClipDB();
   return new Promise((resolve, reject)=>{
@@ -152,7 +171,6 @@ async function idbGetClip(id){
     req.onerror = ()=> reject(req.error);
   });
 }
-
 async function idbDeleteClip(id){
   const db = await openClipDB();
   return new Promise((resolve, reject)=>{
@@ -162,7 +180,6 @@ async function idbDeleteClip(id){
     tx.onerror = ()=> reject(tx.error);
   });
 }
-
 async function idbListClipsByIds(ids){
   const out = [];
   for (const id of ids){
@@ -213,6 +230,17 @@ function markBoardUpdated(){
   saveApp();
 }
 
+// UI persistence (sidebar)
+function loadUI(){
+  const raw = localStorage.getItem(STORAGE.ui);
+  if (!raw) return { sidebarHidden:false };
+  try{ return JSON.parse(raw) || { sidebarHidden:false }; }
+  catch{ return { sidebarHidden:false }; }
+}
+function saveUI(ui){
+  localStorage.setItem(STORAGE.ui, JSON.stringify(ui));
+}
+
 // --------- Undo/Redo ----------
 function snapshotBoard(){
   const b = currentBoard();
@@ -261,71 +289,144 @@ function canvasPointFromEvent(e){
   const scaleY = canvas.height / rect.height;
   return { x:(e.clientX - rect.left)*scaleX, y:(e.clientY - rect.top)*scaleY };
 }
+function clampScale(s){
+  return Math.min(3.2, Math.max(0.55, s));
+}
 
-// --------- Field drawing (vertical + subtle watermark) ----------
+// --------- Field drawing (clean, CHLK-like vibe) ----------
 function drawField(){
   ctx.save();
   ctx.setTransform(view.scale, 0, 0, view.scale, view.tx, view.ty);
 
-  ctx.fillStyle = "#0b3a22";
+  // Turf base
+  ctx.fillStyle = "#0a3a22";
   ctx.fillRect(0,0,canvas.width, canvas.height);
 
-  const margin = 90;
+  const margin = 86;
   const top = margin, left = margin, right = canvas.width - margin, bottom = canvas.height - margin;
   const midX = (left + right) / 2;
   const midY = (top + bottom) / 2;
 
-  // Watermark
+  // Subtle stripes
+  const stripeCount = 12;
+  const stripeH = (bottom - top) / stripeCount;
+  for (let i=0;i<stripeCount;i++){
+    ctx.globalAlpha = (i % 2 === 0) ? 0.10 : 0.06;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(left, top + i*stripeH, right-left, stripeH);
+  }
+  ctx.globalAlpha = 1;
+
+  // End zones (subtle)
+  const ez = 90;
+  ctx.globalAlpha = 0.10;
+  ctx.fillStyle = "#000";
+  ctx.fillRect(left, top, right-left, ez);
+  ctx.fillRect(left, bottom - ez, right-left, ez);
+  ctx.globalAlpha = 1;
+
+  // Watermark (not in the way)
   ctx.save();
   ctx.translate(midX, midY);
   ctx.rotate(-Math.PI/12);
-  ctx.globalAlpha = 0.08;
-  ctx.fillStyle = "#ffffff";
+  ctx.globalAlpha = 0.06;
+  ctx.fillStyle = "#fff";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.font = '900 130px "Champion Serif","Champion-Serif", Georgia, "Times New Roman", serif';
+  ctx.font = '900 140px "Champion Serif","Champion-Serif", Georgia, "Times New Roman", serif';
   ctx.fillText("CoachBoard", 0, 0);
   ctx.restore();
 
-  // Outer
-  ctx.strokeStyle = "rgba(255,255,255,0.65)";
+  // Lines
+  ctx.strokeStyle = "rgba(255,255,255,0.75)";
   ctx.lineWidth = 4;
   ctx.strokeRect(left, top, right-left, bottom-top);
 
-  // Midfield line (horizontal)
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(left, midY);
-  ctx.lineTo(right, midY);
-  ctx.stroke();
-
-  // Hash columns (vertical orientation)
-  const hashInset = 210;
-  const hashX1 = left + hashInset;
-  const hashX2 = right - hashInset;
-
+  // Yard lines (horizontal)
+  ctx.strokeStyle = "rgba(255,255,255,0.38)";
   ctx.lineWidth = 2;
-  for (let y = top; y <= bottom; y += 60) {
-    ctx.beginPath(); ctx.moveTo(hashX1, y); ctx.lineTo(hashX1 + 14, y); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(hashX2, y); ctx.lineTo(hashX2 - 14, y); ctx.stroke();
-  }
 
-  // Yard lines (horizontal across)
-  ctx.strokeStyle = "rgba(255,255,255,0.35)";
-  ctx.lineWidth = 2;
-  for (let y = top; y <= bottom; y += 120) {
+  const yardStep = 110;
+  for (let y = top; y <= bottom; y += yardStep){
     ctx.beginPath();
     ctx.moveTo(left, y);
     ctx.lineTo(right, y);
     ctx.stroke();
   }
 
-  // LOS guide dotted
+  // Goal lines stronger
+  ctx.strokeStyle = "rgba(255,255,255,0.65)";
+  ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(left, top+ez); ctx.lineTo(right, top+ez); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(left, bottom-ez); ctx.lineTo(right, bottom-ez); ctx.stroke();
+
+  // Midfield line
+  ctx.strokeStyle = "rgba(255,255,255,0.70)";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(left, midY);
+  ctx.lineTo(right, midY);
+  ctx.stroke();
+
+  // Hash marks (vertical field -> hashes are two x columns)
+  const hashInset = 210;
+  const hashX1 = left + hashInset;
+  const hashX2 = right - hashInset;
+
+  ctx.strokeStyle = "rgba(255,255,255,0.55)";
+  ctx.lineWidth = 2;
+  for (let y = top + 16; y <= bottom - 16; y += 44){
+    // left hash
+    ctx.beginPath();
+    ctx.moveTo(hashX1, y);
+    ctx.lineTo(hashX1 + 14, y);
+    ctx.stroke();
+
+    // right hash
+    ctx.beginPath();
+    ctx.moveTo(hashX2, y);
+    ctx.lineTo(hashX2 - 14, y);
+    ctx.stroke();
+  }
+
+  // Yard numbers (subtle, both sides)
+  ctx.globalAlpha = 0.22;
+  ctx.fillStyle = "#fff";
+  ctx.font = "900 26px system-ui";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+
+  const numbers = [10,20,30,40,50,40,30,20,10];
+  const numStartY = top + ez + 60;
+  const numGap = (bottom - top - 2*ez - 120) / (numbers.length - 1);
+
+  for (let i=0;i<numbers.length;i++){
+    const y = numStartY + i*numGap;
+    const n = String(numbers[i]);
+
+    // left side
+    ctx.save();
+    ctx.translate(left + 40, y);
+    ctx.rotate(-Math.PI/2);
+    ctx.fillText(n, 0, 0);
+    ctx.restore();
+
+    // right side
+    ctx.save();
+    ctx.translate(right - 40, y);
+    ctx.rotate(Math.PI/2);
+    ctx.fillText(n, 0, 0);
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+
+  // LOS guide (dotted across)
   ctx.setLineDash([10,10]);
   ctx.strokeStyle = "rgba(255,255,255,0.55)";
+  ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(midX - 320, midY);
-  ctx.lineTo(midX + 320, midY);
+  ctx.moveTo(midX - 340, midY);
+  ctx.lineTo(midX + 340, midY);
   ctx.stroke();
   ctx.setLineDash([]);
 
@@ -471,12 +572,51 @@ function addTextAt(x,y,text){
   markBoardUpdated();
 }
 
-// --------- Canvas interactions ----------
+// --------- Pointer/Touch Gestures (pinch to zoom + pan) ----------
+function dist(a,b){
+  const dx = a.x - b.x, dy = a.y - b.y;
+  return Math.sqrt(dx*dx + dy*dy);
+}
+function midpoint(a,b){
+  return { x:(a.x+b.x)/2, y:(a.y+b.y)/2 };
+}
+
+// Start tracking pointers on the canvas
 canvas.addEventListener("pointerdown", (e)=>{
   canvas.setPointerCapture(e.pointerId);
-  const screenPt = canvasPointFromEvent(e);
+  const pt = canvasPointFromEvent(e);
+  pointers.set(e.pointerId, pt);
+
+  // If 2 pointers -> start pinch
+  if (pointers.size === 2){
+    const [p1, p2] = Array.from(pointers.values());
+    pinch.active = true;
+    pinch.panOnly = false;
+    pinch.startDist = dist(p1,p2);
+    pinch.startScale = view.scale;
+    pinch.startTx = view.tx;
+    pinch.startTy = view.ty;
+    pinch.mid = midpoint(p1,p2);
+    return;
+  }
+
+  // If 1 pointer and NOT pinch: treat as normal actions
+  const screenPt = pt;
   const w = toWorld(screenPt);
 
+  // If film is on: allow one-finger pan easily (quality of life)
+  // (Also works normally)
+  if (!pinch.active && (e.pointerType === "touch")){
+    // We’ll allow one-finger panning when NOT actively drawing routes/blocks/text
+    if (tool === "select"){
+      pinch.panOnly = true;
+      isPanning = true;
+      panStart = { x: screenPt.x, y: screenPt.y, tx: view.tx, ty: view.ty };
+      // Still allow selecting/moving players by tapping — if you move, it becomes pan.
+    }
+  }
+
+  // Desktop spacebar pan mode
   if (isPanningMode){
     isPanning = true;
     panStart = { x: screenPt.x, y: screenPt.y, tx: view.tx, ty: view.ty };
@@ -526,9 +666,33 @@ canvas.addEventListener("pointerdown", (e)=>{
 });
 
 canvas.addEventListener("pointermove", (e)=>{
-  const screenPt = canvasPointFromEvent(e);
+  if (!pointers.has(e.pointerId)) return;
+  const pt = canvasPointFromEvent(e);
+  pointers.set(e.pointerId, pt);
 
+  // Pinch zoom when 2 fingers are down
+  if (pinch.active && pointers.size === 2){
+    const [p1,p2] = Array.from(pointers.values());
+    const d = Math.max(10, dist(p1,p2));
+    const scale = clampScale(pinch.startScale * (d / pinch.startDist));
+
+    // Zoom around the pinch midpoint (screen coords)
+    const mid = midpoint(p1,p2);
+    const before = toWorld(mid);
+
+    view.scale = scale;
+
+    const after = toWorld(mid);
+    view.tx += (after.x - before.x) * view.scale;
+    view.ty += (after.y - before.y) * view.scale;
+
+    render();
+    return;
+  }
+
+  // One finger pan (touch) if enabled OR desktop spacebar pan
   if (isPanning){
+    const screenPt = pt;
     view.tx = panStart.tx + (screenPt.x - panStart.x);
     view.ty = panStart.ty + (screenPt.y - panStart.y);
     render();
@@ -538,7 +702,7 @@ canvas.addEventListener("pointermove", (e)=>{
   const b = currentBoard();
   if (!b) return;
 
-  const w = toWorld(screenPt);
+  const w = toWorld(pt);
 
   if (tool === "select" && dragging && b.selectedId){
     const p = b.players.find(x=>x.id===b.selectedId);
@@ -558,13 +722,30 @@ canvas.addEventListener("pointermove", (e)=>{
   }
 });
 
-canvas.addEventListener("pointerup", ()=>{
+canvas.addEventListener("pointerup", (e)=>{
+  pointers.delete(e.pointerId);
+
+  if (pointers.size < 2){
+    pinch.active = false;
+  }
+  if (pointers.size === 0){
+    isPanning = false;
+    pinch.panOnly = false;
+  }
+
   dragging = false;
   drawingStroke = null;
-  isPanning = false;
 });
 
-// Zoom
+canvas.addEventListener("pointercancel", (e)=>{
+  pointers.delete(e.pointerId);
+  pinch.active = false;
+  isPanning = false;
+  dragging = false;
+  drawingStroke = null;
+});
+
+// Desktop wheel zoom
 canvas.addEventListener("wheel", (e)=>{
   e.preventDefault();
   const delta = Math.sign(e.deltaY);
@@ -573,7 +754,7 @@ canvas.addEventListener("wheel", (e)=>{
   const mouse = canvasPointFromEvent(e);
   const before = toWorld(mouse);
 
-  view.scale = Math.min(2.2, Math.max(0.55, view.scale * zoomFactor));
+  view.scale = clampScale(view.scale * zoomFactor);
 
   const after = toWorld(mouse);
   view.tx += (after.x - before.x) * view.scale;
@@ -582,7 +763,7 @@ canvas.addEventListener("wheel", (e)=>{
   render();
 },{ passive:false });
 
-// Spacebar pan
+// Spacebar pan mode (desktop)
 window.addEventListener("keydown", (e)=>{
   if (e.code === "Space"){
     isPanningMode = true;
@@ -623,23 +804,32 @@ dropModeBtn.onclick = ()=>{
   dropModeBtn.textContent = dropMode ? "Drop on Tap" : "Drop Off";
 };
 
-// Film view toggle
+// Sidebar toggle
+toggleSidebarBtn.onclick = ()=>{
+  const ui = loadUI();
+  ui.sidebarHidden = !ui.sidebarHidden;
+  saveUI(ui);
+
+  appMain.classList.toggle("sidebarHidden", ui.sidebarHidden);
+  toggleSidebarBtn.textContent = ui.sidebarHidden ? "Show Panel" : "Hide Panel";
+};
+
+// Film toggle
 toggleFilmViewBtn.onclick = ()=>{
   filmOn = !filmOn;
-  workspaceEl.classList.toggle("filmOn", filmOn);
   filmPane.classList.toggle("hidden", !filmOn);
   toggleFilmViewBtn.classList.toggle("active", filmOn);
   toggleFilmViewBtn.textContent = filmOn ? "Film View On" : "Film View";
 };
 
-// --------- Tabs ----------
+// Tabs
 function setTab(tab){
   tabBtns.forEach(b => b.classList.toggle("active", b.dataset.tab === tab));
   panels.forEach(p => p.classList.toggle("hidden", p.dataset.panel !== tab));
 }
 tabBtns.forEach(b => b.addEventListener("click", ()=> setTab(b.dataset.tab)));
 
-// --------- Status ----------
+// Status
 function toast(msg){
   statusEl.textContent = msg;
   setTimeout(updateStatus, 1400);
@@ -696,7 +886,7 @@ duplicateBoardBtn.onclick = async ()=>{
   const copy = newEmptyBoard(`${b.name} (Copy)`);
   copy.players = JSON.parse(JSON.stringify(b.players));
   copy.strokes = JSON.parse(JSON.stringify(b.strokes));
-  copy.clipIds = [...(b.clipIds || [])]; // copy clip refs
+  copy.clipIds = [...(b.clipIds || [])];
   appData.boards.unshift(copy);
   appData.currentBoardId = copy.id;
   saveApp();
@@ -747,7 +937,6 @@ function applyTemplate(t){
   if (!b) return;
 
   snapshotBoard();
-
   const tpl = t.build();
   const mode = templateModeEl.value;
 
@@ -765,9 +954,8 @@ function applyTemplate(t){
   toast(`Applied: ${t.name}`);
 }
 
-// Template helpers (vertical layout anchors)
 function baseFieldAnchors(){
-  const margin=90;
+  const margin=86;
   const top=margin, left=margin, right=canvas.width-margin, bottom=canvas.height-margin;
   const midX=(left+right)/2;
   const midY=(top+bottom)/2;
@@ -946,7 +1134,6 @@ function renderPractice(){
     periodListEl.appendChild(wrap);
   });
 }
-
 addPeriodBtn.onclick = ()=> { appData.practice.periods.push({ time:"", title:"", note:"" }); renderPractice(); };
 clearPracticeBtn.onclick = ()=> { if(confirm("Clear practice plan?")){ appData.practice={date:"",periods:[]}; renderPractice(); saveApp(); } };
 savePracticeBtn.onclick = ()=> { appData.practice.date = practiceDateEl.value || ""; saveApp(); toast("Practice plan saved."); };
@@ -958,14 +1145,11 @@ exportPngBtn.onclick = ()=>{
   a.href = canvas.toDataURL("image/png");
   a.click();
 };
-
 exportPdfBtn.onclick = ()=>{
   const b = currentBoard();
   if (!b) return;
-
   const img = canvas.toDataURL("image/png");
   const practiceHtml = buildPracticeHtmlForPrint();
-
   const w = window.open("", "_blank");
   if (!w) return alert("Popup blocked. Allow popups for PDF export.");
 
@@ -995,12 +1179,10 @@ exportPdfBtn.onclick = ()=>{
             <h1>${escapeHtml(b.name)}</h1>
             <div class="meta">Exported from CoachBoard • Offline-first</div>
           </div>
-
           <div class="card">
             <div class="small">Diagram</div>
             <img src="${img}" />
           </div>
-
           ${practiceHtml}
         </div>
         <script>setTimeout(()=> window.print(), 400);</script>
@@ -1009,7 +1191,6 @@ exportPdfBtn.onclick = ()=>{
   `);
   w.document.close();
 };
-
 function buildPracticeHtmlForPrint(){
   const pr = appData.practice || { date:"", periods:[] };
   const periods = pr.periods || [];
@@ -1034,7 +1215,7 @@ function buildPracticeHtmlForPrint(){
   `;
 }
 
-// --------- Film: import / list / play ----------
+// --------- Film ----------
 addClipsBtn.onclick = ()=> clipPicker.click();
 
 clipPicker.addEventListener("change", async ()=>{
@@ -1046,13 +1227,12 @@ clipPicker.addEventListener("change", async ()=>{
 
   toast(`Importing ${files.length} clip(s)…`);
   for (const f of files){
-    const blob = f; // File is a Blob
     const id = crypto.randomUUID();
     await idbPutClip({
       id,
       name: f.name || "Clip",
       type: f.type || "video/mp4",
-      blob,
+      blob: f,
       createdAt: Date.now()
     });
     b.clipIds.push(id);
@@ -1066,15 +1246,11 @@ clipPicker.addEventListener("change", async ()=>{
 clearClipsBtn.onclick = async ()=>{
   const b = currentBoard();
   if (!b) return;
-  if (!confirm("Remove all clips from this board? (Deletes the offline clips too)")) return;
+  if (!confirm("Remove all clips from this board? (Deletes offline clips too)")) return;
 
-  // delete from DB
-  for (const id of (b.clipIds || [])){
-    await idbDeleteClip(id);
-  }
+  for (const id of (b.clipIds || [])) await idbDeleteClip(id);
   b.clipIds = [];
   saveApp();
-
   stopCurrentClip();
   await renderClipLists();
   toast("Clips cleared.");
@@ -1084,7 +1260,6 @@ async function renderClipLists(){
   const b = currentBoard();
   if (!b) return;
 
-  // Left panel list
   clipListEl.innerHTML = "";
   const clips = await idbListClipsByIds(b.clipIds || []);
   if (clips.length === 0){
@@ -1116,7 +1291,6 @@ async function renderClipLists(){
     }
   }
 
-  // Film pane mini list
   filmMiniList.innerHTML = "";
   if (clips.length === 0){
     filmMiniList.innerHTML = `<div class="hint">No clips yet.</div>`;
@@ -1136,17 +1310,14 @@ async function playClipById(id){
   const clip = await idbGetClip(id);
   if (!clip) return toast("Clip not found.");
 
-  // Clean up old object URL
   if (currentClipUrl) URL.revokeObjectURL(currentClipUrl);
 
   currentClipId = id;
   currentClipUrl = URL.createObjectURL(clip.blob);
   filmPlayer.src = currentClipUrl;
 
-  // turn on film view if off
   if (!filmOn){
     filmOn = true;
-    workspaceEl.classList.add("filmOn");
     filmPane.classList.remove("hidden");
     toggleFilmViewBtn.classList.add("active");
     toggleFilmViewBtn.textContent = "Film View On";
@@ -1178,13 +1349,18 @@ function init(){
   refreshBoardPicker();
   initTemplateList();
 
-  // layer init
+  // Apply saved UI state (sidebar)
+  const ui = loadUI();
+  appMain.classList.toggle("sidebarHidden", !!ui.sidebarHidden);
+  toggleSidebarBtn.textContent = ui.sidebarHidden ? "Show Panel" : "Hide Panel";
+
+  // layers init
   activeLayer = activeLayerEl.value;
   showLayer.base = showBaseEl.checked;
   showLayer.tags = showTagsEl.checked;
   showLayer.adj  = showAdjEl.checked;
 
-  // stencil init
+  // stencils init
   setStencilTab("O");
 
   // practice init
@@ -1195,12 +1371,42 @@ function init(){
   window.addEventListener("online", updateStatus);
   window.addEventListener("offline", updateStatus);
 
-  // board clips init
   renderClipLists();
 
-  // seed undo + render
   snapshotBoard();
   render();
 }
+
+// --------- Remaining required wiring from earlier versions ----------
+function setStencilTab(tab){
+  activeStencilTab = tab;
+  stencilTabBtns.forEach(b => b.classList.toggle("active", b.dataset.stab === tab));
+  buildStencilGrid();
+}
+function buildStencilGrid(){
+  stencilGrid.innerHTML = "";
+  const labels = STENCILS[activeStencilTab] || [];
+  for (const lbl of labels){
+    const btn = document.createElement("button");
+    btn.className = "stencilBtn";
+    btn.textContent = lbl;
+    btn.dataset.label = lbl;
+    btn.onclick = ()=> setActiveStencil(lbl);
+    stencilGrid.appendChild(btn);
+  }
+  setActiveStencil(labels[0] || "X");
+}
+function setActiveStencil(label){
+  activeStencilLabel = label;
+  Array.from(document.querySelectorAll(".stencilBtn")).forEach(btn=>{
+    btn.classList.toggle("active", btn.dataset.label === label);
+  });
+  toast(`Stencil: ${label}`);
+}
+
+function snapshotBoardSeed(){
+  snapshotBoard();
+}
+snapshotBoardSeed();
 
 init();
