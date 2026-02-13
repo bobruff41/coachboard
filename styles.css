@@ -70,3 +70,36 @@ body { margin:0; background:var(--bg); color:var(--ink); }
   touch-action: none; /* important for Apple Pencil / touch */
   display:block;
 }
+.stencilTabs{
+  display:flex;
+  gap:8px;
+  margin: 10px 0;
+}
+.tabBtn{
+  flex:1;
+  border:1px solid #2a3042;
+  background:#0f1117;
+  color:var(--ink);
+  padding:8px 10px;
+  border-radius:10px;
+  font-weight:800;
+}
+.tabBtn.active{ border-color: var(--accent); }
+
+.stencilGrid{
+  display:grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap:8px;
+}
+.stencilBtn{
+  border:1px solid #2a3042;
+  background:#151a26;
+  color:var(--ink);
+  padding:10px 8px;
+  border-radius:12px;
+  font-weight:900;
+  text-align:center;
+}
+.stencilBtn.active{
+  border-color: var(--accent);
+}
