@@ -33,47 +33,46 @@
   <main class="main">
     <aside class="left">
       <div class="panel">
-  <div class="panelTitle">Stencil</div>
+        <div class="panelTitle">Stencil</div>
 
-  <div class="stencilRow">
-    <label class="label">Quick</label>
-    <button id="addFromStencil" class="btn">Drop on Tap</button>
-  </div>
+        <div class="stencilRow">
+          <label class="label">Quick</label>
+          <button id="addFromStencil" class="btn active">Drop on Tap</button>
+        </div>
 
-  <div class="stencilRow">
-    <label class="label">Label</label>
-    <input id="playerLabel" class="input" value="X" maxlength="4" />
-  </div>
+        <div class="stencilRow">
+          <label class="label">Label</label>
+          <input id="playerLabel" class="input" value="X" maxlength="4" />
+        </div>
 
-  <div class="stencilRow">
-    <label class="label">Side</label>
-    <select id="playerSide" class="input">
-      <option value="O">Offense</option>
-      <option value="D">Defense</option>
-      <option value="ST">ST</option>
-    </select>
-  </div>
+        <div class="stencilRow">
+          <label class="label">Side</label>
+          <select id="playerSide" class="input">
+            <option value="O">Offense</option>
+            <option value="D">Defense</option>
+            <option value="ST">ST</option>
+          </select>
+        </div>
 
-  <div class="stencilTabs">
-    <button class="tabBtn active" data-tab="O">Offense</button>
-    <button class="tabBtn" data-tab="D">Defense</button>
-    <button class="tabBtn" data-tab="ST">Special</button>
-  </div>
+        <div class="stencilTabs">
+          <button class="tabBtn active" data-tab="O">Offense</button>
+          <button class="tabBtn" data-tab="D">Defense</button>
+          <button class="tabBtn" data-tab="ST">Special</button>
+        </div>
 
-  <div id="stencilGrid" class="stencilGrid"></div>
+        <div id="stencilGrid" class="stencilGrid"></div>
 
-  <div class="hint">
-    1) Pick a stencil (QB, X, Mike, etc). 2) Tap the field to drop it.
-    Select tool still moves players. Route/Block still draws.
-  </div>
-</div>
-
+        <div class="hint">
+          Pick a stencil (QB, X, Mike, etc) → tap the field to drop it.
+          Select tool still moves players. Route/Block still draws.
+        </div>
+      </div>
 
       <div class="panel">
         <div class="panelTitle">Offline</div>
         <div id="offlineStatus" class="status">Checking…</div>
         <div class="hint">
-          Once you open it once, it works offline (cached).
+          Open once online (from Home Screen icon on iPad) to cache for offline.
         </div>
       </div>
     </aside>
@@ -86,5 +85,3 @@
   <script src="app.js"></script>
 </body>
 </html>
-
-
