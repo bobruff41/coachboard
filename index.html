@@ -6,79 +6,166 @@
   <title>CoachBoard</title>
   <link rel="manifest" href="manifest.json" />
   <link rel="stylesheet" href="styles.css" />
-  <meta name="theme-color" content="#111111" />
+  <meta name="theme-color" content="#0f1117" />
 </head>
 <body>
   <header class="topbar">
-    <div class="brand">CoachBoard</div>
+    <div class="brand">
+      <div class="logoDot"></div>
+      <div>
+        <div class="brandName">CoachBoard</div>
+        <div class="brandSub">Offline diagram + practice OS</div>
+      </div>
+    </div>
 
     <div class="toolbar">
+      <button id="undo" class="btn">Undo</button>
+      <button id="redo" class="btn">Redo</button>
+
+      <div class="divider"></div>
+
       <button id="toolSelect" class="btn active">Select</button>
       <button id="toolRoute" class="btn">Route</button>
       <button id="toolBlock" class="btn">Block</button>
+      <button id="toolText" class="btn">Text</button>
 
       <div class="divider"></div>
 
-      <button id="addPlayer" class="btn">+ Player</button>
-      <button id="clearAll" class="btn danger">Clear</button>
-
-      <div class="divider"></div>
-
-      <button id="save" class="btn">Save</button>
-      <button id="load" class="btn">Load</button>
       <button id="exportPng" class="btn">Export PNG</button>
+      <button id="exportPdf" class="btn">Export PDF</button>
     </div>
   </header>
 
   <main class="main">
     <aside class="left">
       <div class="panel">
-        <div class="panelTitle">Stencil</div>
+        <div class="tabs">
+          <button class="tab active" data-tab="library">Library</button>
+          <button class="tab" data-tab="templates">Templates</button>
+          <button class="tab" data-tab="stencils">Stencils</button>
+          <button class="tab" data-tab="practice">Practice</button>
+        </div>
+      </div>
 
-        <div class="stencilRow">
-          <label class="label">Quick</label>
-          <button id="addFromStencil" class="btn active">Drop on Tap</button>
+      <!-- LIBRARY -->
+      <section class="panel tabPanel" data-panel="library">
+        <div class="panelTitleRow">
+          <div class="panelTitle">Boards</div>
+          <button id="newBoard" class="btn small">New</button>
         </div>
 
-        <div class="stencilRow">
-          <label class="label">Label</label>
-          <input id="playerLabel" class="input" value="X" maxlength="4" />
+        <div class="row">
+          <label class="label">Current</label>
+          <select id="boardPicker" class="input"></select>
         </div>
 
-        <div class="stencilRow">
-          <label class="label">Side</label>
-          <select id="playerSide" class="input">
-            <option value="O">Offense</option>
-            <option value="D">Defense</option>
-            <option value="ST">ST</option>
+        <div class="row">
+          <label class="label">Name</label>
+          <input id="boardName" class="input" placeholder="Board name" />
+        </div>
+
+        <div class="btnGrid">
+          <button id="saveBoardName" class="btn">Rename</button>
+          <button id="duplicateBoard" class="btn">Duplicate</button>
+          <button id="deleteBoard" class="btn danger">Delete</button>
+        </div>
+
+        <div class="hint">
+          Tip: Your Library is offline. Use “Export PDF” for staff handouts.
+        </div>
+      </section>
+
+      <!-- TEMPLATES -->
+      <section class="panel tabPanel hidden" data-panel="templates">
+        <div class="panelTitle">Templates</div>
+
+        <div class="row">
+          <label class="label">Apply</label>
+          <select id="templateMode" class="input">
+            <option value="replace">Replace board</option>
+            <option value="add">Add to board</option>
           </select>
         </div>
 
+        <div class="templateList" id="templateList"></div>
+
+        <div class="hint">
+          Templates are fast starting points. Add Tags/Adjust layers for week installs.
+        </div>
+      </section>
+
+      <!-- STENCILS -->
+      <section class="panel tabPanel hidden" data-panel="stencils">
+        <div class="panelTitle">Stencils</div>
+
+        <div class="row">
+          <label class="label">Layer</label>
+          <select id="activeLayer" class="input">
+            <option value="base">Base</option>
+            <option value="tags">Tags</option>
+            <option value="adj">Adjust</option>
+          </select>
+        </div>
+
+        <div class="row">
+          <label class="label">Show</label>
+          <div class="toggles">
+            <label class="toggle"><input id="showBase" type="checkbox" checked /> Base</label>
+            <label class="toggle"><input id="showTags" type="checkbox" checked /> Tags</label>
+            <label class="toggle"><input id="showAdj" type="checkbox" checked /> Adjust</label>
+          </div>
+        </div>
+
+        <div class="row">
+          <label class="label">Drop</label>
+          <button id="dropMode" class="btn active">Drop on Tap</button>
+        </div>
+
         <div class="stencilTabs">
-          <button class="tabBtn active" data-tab="O">Offense</button>
-          <button class="tabBtn" data-tab="D">Defense</button>
-          <button class="tabBtn" data-tab="ST">Special</button>
+          <button class="tabBtn active" data-stab="O">Offense</button>
+          <button class="tabBtn" data-stab="D">Defense</button>
+          <button class="tabBtn" data-stab="ST">Special</button>
         </div>
 
         <div id="stencilGrid" class="stencilGrid"></div>
 
         <div class="hint">
-          Pick a stencil (QB, X, Mike, etc) → tap the field to drop it.
-          Select tool still moves players. Route/Block still draws.
+          Select: move items. Route/Block: draw. Spacebar: pan canvas. Mouse wheel: zoom.
         </div>
-      </div>
+      </section>
 
-      <div class="panel">
-        <div class="panelTitle">Offline</div>
-        <div id="offlineStatus" class="status">Checking…</div>
-        <div class="hint">
-          Open once online (from Home Screen icon on iPad) to cache for offline.
+      <!-- PRACTICE -->
+      <section class="panel tabPanel hidden" data-panel="practice">
+        <div class="panelTitleRow">
+          <div class="panelTitle">Practice Plan</div>
+          <button id="addPeriod" class="btn small">Add</button>
         </div>
-      </div>
+
+        <div class="row">
+          <label class="label">Date</label>
+          <input id="practiceDate" class="input" placeholder="e.g., Tue Week 3" />
+        </div>
+
+        <div id="periodList" class="periodList"></div>
+
+        <div class="btnGrid">
+          <button id="clearPractice" class="btn danger">Clear Plan</button>
+          <button id="savePractice" class="btn">Save Plan</button>
+        </div>
+
+        <div class="hint">
+          Export PDF prints: diagram + practice plan. Great for assistants + player install.
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panelTitle">Status</div>
+        <div id="status" class="status">Loading…</div>
+      </section>
     </aside>
 
     <section class="canvasWrap">
-      <canvas id="board" width="1400" height="900"></canvas>
+      <canvas id="board" width="1600" height="1000"></canvas>
     </section>
   </main>
 
