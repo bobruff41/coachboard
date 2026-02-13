@@ -1,4 +1,4 @@
-const CACHE_NAME = "coachboard-v2";
+const CACHE_NAME = "coachboard-pro-v3";
 const ASSETS = ["./", "./index.html", "./styles.css", "./app.js", "./manifest.json", "./sw.js"];
 
 self.addEventListener("install", (event) => {
