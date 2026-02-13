@@ -19,6 +19,10 @@
     </div>
 
     <div class="toolbar">
+      <button id="toggleSidebar" class="btn">Hide Panel</button>
+
+      <div class="divider"></div>
+
       <button id="undo" class="btn">Undo</button>
       <button id="redo" class="btn">Redo</button>
 
@@ -40,10 +44,11 @@
     </div>
   </header>
 
-  <main class="main">
-    <aside class="left">
+  <main id="appMain" class="main">
+    <aside id="sidebar" class="left">
       <div class="panel">
-        <div class="tabs tabs5">
+        <!-- SCROLLABLE TABS ROW -->
+        <div class="tabs tabsScroll">
           <button class="tab active" data-tab="library">Library</button>
           <button class="tab" data-tab="templates">Templates</button>
           <button class="tab" data-tab="stencils">Stencils</button>
@@ -135,7 +140,7 @@
         <div id="stencilGrid" class="stencilGrid"></div>
 
         <div class="hint">
-          Select: move items. Route/Block: draw. Spacebar: pan canvas. Mouse wheel: zoom.
+          Select: move items • Route/Block: draw • Spacebar: pan • Wheel/Pinch: zoom
         </div>
       </section>
 
@@ -159,7 +164,7 @@
         </div>
 
         <div class="hint">
-          Export PDF prints: diagram + practice plan. Great for assistants + player install.
+          Export PDF prints: diagram + practice plan.
         </div>
       </section>
 
@@ -171,8 +176,7 @@
         </div>
 
         <div class="hint">
-          Import clips (MP4/MOV). Then enable “Film View” to see video side-by-side with the field.
-          Clips are stored offline on this device.
+          Import clips (MP4/MOV). Enable “Film View” for side-by-side.
         </div>
 
         <div class="row" style="margin-top:10px;">
@@ -182,7 +186,6 @@
 
         <div id="clipList" class="clipList"></div>
 
-        <!-- hidden file input -->
         <input id="clipPicker" type="file" accept="video/*" multiple class="hidden" />
       </section>
 
@@ -193,15 +196,16 @@
     </aside>
 
     <section class="canvasWrap">
-      <div class="workspace">
-        <div class="canvasPane">
+      <div class="workspace" id="workspace">
+        <div class="canvasPane" id="canvasPane">
           <canvas id="board" width="1600" height="1000"></canvas>
+          <div class="pinchHint">Pinch to zoom • Drag to pan (hold Space on desktop)</div>
         </div>
 
         <div id="filmPane" class="filmPane hidden">
           <div class="filmHeader">
             <div class="filmTitle">Film View</div>
-            <div class="filmSub">Pick a clip on the left panel (Film tab) or below.</div>
+            <div class="filmSub">Pinch the field to resize. Pick a clip below.</div>
           </div>
 
           <video id="filmPlayer" class="filmPlayer" controls playsinline></video>
